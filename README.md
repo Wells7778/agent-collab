@@ -53,7 +53,10 @@ daemon 啟動時會 probe 每個 enabled agent(跑它的 `probe` 命令),不通�
 backlog → in-progress/<agent> → review →(人按完成)→ done
               ↓          ↑
            blocked →(人回覆)→ backlog
+              └─(人丟棄)→ done(cancelled)
 ```
+
+**Blocked 兩個動作**:回覆(回覆 append 進任務檔後退回 backlog 重派)、丟棄不做(標記 `cancelled` 移入 done/,不再派工)。無效或已無意義的卡關任務不必硬解,直接丟棄。
 
 **任務型別**決定 agent 做什麼、以及誰接得到:
 

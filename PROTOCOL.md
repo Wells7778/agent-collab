@@ -20,10 +20,11 @@
 backlog → in-progress/<agent> → review → done
               ↓          ↑
            blocked →(人回覆)→ backlog
+              └─(人丟棄)→ done(cancelled)
 ```
 
 - 檔內 `status` 欄位僅供顯示;有分岔一律以目錄為準。
-- 取消:`status: cancelled`,檔案在 done/。
+- 取消:`status: cancelled`,檔案在 done/;來源為 review/(人取消)或 blocked/(人丟棄不做)。
 - schema 驗證不合格 → invalid/ 並記事件。
 
 ## 3. 任務檔

@@ -371,7 +371,7 @@ function renderCards(board) {
   ).join("");
 
   document.getElementById("blocked-list").innerHTML = board.blocked.map((t) =>
-    '<div class="task-card" data-blocked="' + escapeHtml(t.id) + '" style="border-color: #b13e53;"><div class="sk" style="font-size: 10px; color: #b13e53;">' + escapeHtml(t.id) + '</div><div style="font-size: 13px; font-weight: 700;">' + escapeHtml(t.title) + '</div><div style="font-size: 11px; color: #47536b;">點擊回覆提問</div></div>'
+    '<div class="task-card" data-blocked="' + escapeHtml(t.id) + '" style="border-color: #b13e53;"><div class="sk" style="font-size: 10px; color: #b13e53;">' + escapeHtml(t.id) + '</div><div style="font-size: 13px; font-weight: 700;">' + escapeHtml(t.title) + '</div><div style="font-size: 11px; color: #47536b;">點擊回覆或丟棄</div></div>'
   ).join("");
 
   document.getElementById("done-list").innerHTML = board.done.slice(-9).map((t) =>
@@ -646,7 +646,10 @@ async function openBlockedModal(taskId) {
     '<div style="font-size: 16px; font-weight: 700; color: #f4f4f4;">' + escapeHtml(task.id + " " + task.title) + "</div>" +
     '<pre style="font-size: 12px; color: #b8c5d4; background: #141522; border: 2px solid #333c57; padding: 10px; max-height: 200px; overflow: auto; white-space: pre-wrap; margin: 0;">' + escapeHtml(reportTail || "(執行報告為空,提問見 MESSAGES)") + "</pre>" +
     field("你的回覆(會 append 進任務檔並退回待派)", '<textarea id="b-reply" class="pxfield" style="height: 96px; resize: none;" placeholder="回答 agent 的提問"></textarea>') +
-    '<div style="display: flex; justify-content: flex-end;"><div id="b-send" class="pxbtn" style="height: 48px; padding: 0 24px; background: #ffcd75; color: #1a1c2c; display: flex; align-items: center;"><div style="font-size: 14px; font-weight: 700;">送出回覆並解卡</div></div></div>'
+    '<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">' +
+    '<div id="b-discard" class="pxbtn" style="height: 48px; background: #7d90a8; color: #141522; display: flex; align-items: center; justify-content: center;"><div style="font-size: 14px; font-weight: 700;">✕ 丟棄不做</div></div>' +
+    '<div id="b-send" class="pxbtn" style="height: 48px; background: #ffcd75; color: #1a1c2c; display: flex; align-items: center; justify-content: center;"><div style="font-size: 14px; font-weight: 700;">送出回覆並解卡</div></div>' +
+    "</div>"
   );
   document.getElementById("b-send").onclick = async () => {
     const reply = document.getElementById("b-reply").value.trim();
@@ -654,6 +657,13 @@ async function openBlockedModal(taskId) {
     try {
       await api("/api/tasks/" + taskId + "/reply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reply_md: reply }) });
       close(); toast(task.id + " 已回覆,退回待派區"); refreshBoardNow();
+    } catch (err) { toast(err.message, false); }
+  };
+  document.getElementById("b-discard").onclick = async () => {
+    if (!confirm(task.id + " 丟棄後會標記為 cancelled 移入交付架,確定?")) return;
+    try {
+      await api("/api/tasks/" + taskId + "/cancel", { method: "POST" });
+      close(); toast(task.id + " 已丟棄"); refreshBoardNow();
     } catch (err) { toast(err.message, false); }
   };
 }
