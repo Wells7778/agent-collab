@@ -108,6 +108,12 @@ agents:
   # ⚠️ headless 模式下每個 CLI 都需要自己的「免詢問」旗標,否則它會靜默
   # 自動拒絕工具授權並輸出 0 byte:agy 用 --dangerously-skip-permissions、
   # claude 同名、codex 用 --sandbox、hermes 用 --yolo。漏了就永遠跑不起來。
+  #
+  # 這些旗標是真的把授權關掉,不是形式。本專案的安全姿態寫在 PROTOCOL.md §10:
+  # 這是維護邊界不是安全邊界,同帳號下防意外不防惡意。要真隔離請升級到獨立
+  # OS user 或容器。能疊沙箱的就疊:agy 的 --sandbox 擋掉 shell(因此也擋掉
+  # git commit/push 與任意命令),但**不擋檔案讀寫**;codex 的 --sandbox
+  # workspace-write 把寫入限制在 workspace 內。
   researcher:
     enabled: false
     runtime: agy
@@ -123,6 +129,7 @@ agents:
         gemini-3.7-flash-high,
         --print-timeout,
         10m,
+        --sandbox,
         --dangerously-skip-permissions,
       ]
     probe: [agy, --help]
