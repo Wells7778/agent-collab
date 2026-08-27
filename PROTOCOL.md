@@ -133,11 +133,15 @@ fenced code block,語言標記固定 `hub-report`,內容為單一 JSON object:
 {"ts": "2026-08-26T10:00:00+08:00", "actor": "daemon", "event": "task_dispatched", "task_id": "T-20260826-001", "agent": "claude", "detail": {}}
 ```
 
-事件類型——daemon:`daemon_started` `probe_failed` `task_invalid` `task_dispatched` `agent_spawned` `spawn_failed` `task_checkpoint` `task_blocked` `task_review_ready` `task_done` `agent_exited` `agent_timeout` `agent_rate_limited` `task_requeued`;dashboard:`task_created` `task_replied` `task_returned` `task_completed` `task_cancelled` `review_task_created`。
+事件類型——daemon:`daemon_started` `probe_failed` `task_invalid` `task_dispatched` `agent_spawned` `spawn_failed` `task_checkpoint` `report_parse_failed` `task_no_report` `task_blocked` `task_review_ready` `task_done` `agent_exited` `agent_timeout` `agent_rate_limited` `task_requeued`;dashboard:`task_created` `task_replied` `task_returned` `task_completed` `task_cancelled` `review_task_created`。
+
+`report_parse_failed` 每個格式錯誤的 `hub-report` 區塊發一次(detail.error 含原因與內容片段);`task_no_report` 在 agent 退出但沒有任何 final/blocked 報告時發一次(detail 含 `report_blocks` / `parse_errors` / `stdout_bytes`)。兩者合起來區分「agent 根本沒寫報告」與「寫了但格式錯」。
 
 ## 9. 運行參數(config.yaml)
 
-- 全域併發 ≤ 2;同一 project 同時 ≤ 1;同一 agent 同時 ≤ 1(不分任務 type 一律計入)。
+- 全域併發 ≤ 4;同一 `(project, branch_base)` 的**寫入型**任務同時 ≤ 2;同一 agent 同時 ≤ 1。
+- `review` 任務是唯讀的,不佔寫入槽;寫入槽的 key 一律取自 projects.yaml 的 `default_branch`,不看任務檔上可能過期的 `workspace.branch_base`。
+- 人類介入(dashboard 的 reply 與 return)把任務送回 backlog 時 generation 歸零——介入等於提供新資訊,重試預算重新計算。
 - `assigned_to` 只繞過能力路由(skills 比對與 allowed_agents);agent enabled 與各併發上限是系統不變量,一律強制。
 - 任務逾時 120 分鐘(系統睡眠不計,喚醒後給 grace period);心跳 60 秒。
 - 回收:kill pgid → 未提交 WIP commit 成 checkpoint → generation +1 → 退回 backlog(沿用原 worktree,自分支尖端續作)。

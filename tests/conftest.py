@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG: dict = {
     "workspaces_root": "~/agent-workspaces-test",
     "max_concurrent_global": 2,
-    "max_concurrent_per_project": 1,
+    "max_concurrent_per_branch_base": 1,
     "max_concurrent_per_agent": 1,
     "task_timeout_minutes": 120,
     "heartbeat_seconds": 60,
@@ -187,6 +187,11 @@ def put_task(hub_dir: Path, subdir: str, task: TaskFile) -> Path:
     path = hub_dir / "tasks" / subdir / f"{task.id}.md"
     hubfs.write_task(path, task)
     return path
+
+
+def write_config(hub_dir: Path, **overrides) -> None:
+    config = {**DEFAULT_CONFIG, **overrides}
+    (hub_dir / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
 
 
 def read_events(hub_dir: Path) -> list[Event]:

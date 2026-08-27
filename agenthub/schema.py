@@ -23,6 +23,8 @@ EventType = Literal[
     "agent_spawned",
     "spawn_failed",
     "task_checkpoint",
+    "report_parse_failed",
+    "task_no_report",
     "task_blocked",
     "task_review_ready",
     "task_done",
@@ -197,7 +199,7 @@ class HubConfig(BaseModel):
     workspaces_root: str
     spawn_env: dict[str, str] = Field(default_factory=dict)
     max_concurrent_global: int
-    max_concurrent_per_project: int
+    max_concurrent_per_branch_base: int
     max_concurrent_per_agent: int
     task_timeout_minutes: int
     heartbeat_seconds: int

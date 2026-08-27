@@ -98,7 +98,7 @@ def test_example_config_matches_protocol_shape():
     assert isinstance(config, HubConfig)
     assert set(config.agents) == {"claude", "codex", "hermes", "agy"}
     assert config.max_concurrent_global == 2
-    assert config.max_concurrent_per_project == 1
+    assert config.max_concurrent_per_branch_base == 2
     assert config.max_concurrent_per_agent == 1
     assert config.task_timeout_minutes == 120
     assert config.heartbeat_seconds == 60

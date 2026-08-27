@@ -812,3 +812,33 @@ def test_session_log_without_logfile_returns_empty(client: TestClient, hub_dir: 
 
 def test_session_log_unknown_task_is_404(client: TestClient):
     assert client.get("/api/sessions/T-20260826-999/log").status_code == 404
+
+
+def test_reply_resets_generation_so_human_input_restores_the_retry_budget(
+    client: TestClient, hub_dir: Path
+):
+    put_task(
+        hub_dir,
+        "blocked",
+        make_task(id="T-1", status="blocked", claimed_by="claude", generation=3),
+    )
+
+    res = client.post("/api/tasks/T-1/reply", json={"reply_md": "here is the missing context"})
+
+    assert res.status_code == 200
+    assert res.json()["generation"] == 0
+    assert hubfs.read_task(hub_dir / "tasks" / "backlog" / "T-1.md").generation == 0
+
+
+def test_return_resets_generation(client: TestClient, hub_dir: Path):
+    put_task(
+        hub_dir,
+        "review",
+        make_task(id="T-1", status="review", claimed_by="claude", generation=2),
+    )
+
+    res = client.post("/api/tasks/T-1/return", json={"feedback_md": "please redo the error path"})
+
+    assert res.status_code == 200
+    assert res.json()["generation"] == 0
+    assert hubfs.read_task(hub_dir / "tasks" / "backlog" / "T-1.md").generation == 0

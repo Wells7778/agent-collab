@@ -8,7 +8,7 @@ workspaces_root: ~/agent-workspaces
 spawn_env: {}
 
 max_concurrent_global: 2
-max_concurrent_per_project: 1
+max_concurrent_per_branch_base: 2
 max_concurrent_per_agent: 1
 
 task_timeout_minutes: 120

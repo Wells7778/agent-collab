@@ -22,6 +22,7 @@ from agenthub.schema import (
 
 _HUB_REPORT_BLOCK_RE = re.compile(r"```hub-report\s*\n(.*?)\n```", re.DOTALL)
 _PRIORITY_RANK = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+_NON_WRITING_TASK_TYPES = {"review"}
 
 
 @dataclass(frozen=True)
@@ -158,14 +159,20 @@ class Scheduler:
         candidates.sort(key=lambda t: (_PRIORITY_RANK[t.priority], t.id))
 
         global_count = len(in_progress)
-        project_counts = Counter(task.project for _, _, task in in_progress)
+        write_slot_counts = Counter(
+            slot for _, _, task in in_progress if (slot := self._write_slot(task)) is not None
+        )
         agent_counts = Counter(agent for agent, _, _ in in_progress)
 
         dispatched: list[_InProgressEntry] = []
         for task in candidates:
             if global_count >= self.config.max_concurrent_global:
                 break
-            if project_counts[task.project] >= self.config.max_concurrent_per_project:
+            write_slot = self._write_slot(task)
+            if (
+                write_slot is not None
+                and write_slot_counts[write_slot] >= self.config.max_concurrent_per_branch_base
+            ):
                 continue
             if not self._dependencies_satisfied(task):
                 continue
@@ -179,9 +186,18 @@ class Scheduler:
                 continue
             dispatched.append(entry)
             global_count += 1
-            project_counts[task.project] += 1
+            if write_slot is not None:
+                write_slot_counts[write_slot] += 1
             agent_counts[agent] += 1
         return dispatched
+
+    def _write_slot(self, task: TaskFile) -> tuple[str, str] | None:
+        if task.type in _NON_WRITING_TASK_TYPES:
+            return None
+        project_cfg = self.projects.get(task.project)
+        if project_cfg is None:
+            return None
+        return task.project, project_cfg.default_branch
 
     def _scan_and_validate_backlog(self) -> list[TaskFile]:
         valid: list[TaskFile] = []
@@ -307,7 +323,10 @@ class Scheduler:
                 self._recover(task, task_path, agent, handle, is_timeout=True)
             return
 
-        reports = _extract_hub_reports(result.stdout)
+        reports, parse_errors = _extract_hub_reports(result.stdout)
+        for error in parse_errors:
+            self._emit("report_parse_failed", task.id, agent, {"error": error})
+
         conclusion: HubReport | None = None
         for report in reports:
             if report.kind == "checkpoint":
@@ -321,6 +340,16 @@ class Scheduler:
         elif result.rate_limited:
             self._handle_rate_limited(task, task_path, agent, result.rate_limit_reset_at)
         else:
+            self._emit(
+                "task_no_report",
+                task.id,
+                agent,
+                {
+                    "report_blocks": len(reports) + len(parse_errors),
+                    "parse_errors": len(parse_errors),
+                    "stdout_bytes": len(result.stdout),
+                },
+            )
             self._recover(task, task_path, agent, handle, is_timeout=False)
 
     def _append_checkpoint(self, task: TaskFile, task_path: Path, report: HubReport) -> TaskFile:
@@ -454,15 +483,23 @@ class Scheduler:
         )
 
 
-def _extract_hub_reports(stdout: str) -> list[HubReport]:
+def _extract_hub_reports(stdout: str) -> tuple[list[HubReport], list[str]]:
     reports: list[HubReport] = []
+    errors: list[str] = []
     for match in _HUB_REPORT_BLOCK_RE.finditer(stdout):
+        block = match.group(1)
         try:
-            data = json.loads(match.group(1))
-        except json.JSONDecodeError:
+            data = json.loads(block)
+        except json.JSONDecodeError as exc:
+            errors.append(f"invalid json: {exc}; block={_truncate(block)}")
             continue
         try:
             reports.append(HubReport.model_validate(data))
-        except Exception:
-            continue
-    return reports
+        except Exception as exc:
+            errors.append(f"schema validation failed: {exc}; block={_truncate(block)}")
+    return reports, errors
+
+
+def _truncate(text: str, limit: int = 200) -> str:
+    collapsed = " ".join(text.split())
+    return collapsed if len(collapsed) <= limit else collapsed[:limit] + "…"

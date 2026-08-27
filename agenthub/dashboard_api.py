@@ -186,7 +186,10 @@ def create_app(hub_dir: Path) -> FastAPI:
         entry = f"### 人類回覆 {now.isoformat()}\n\n{req.reply_md}\n"
         reported = task.with_report_appended(entry)
         updated = hubfs.transition(
-            reported, path, paths.backlog, {"status": "backlog", "claimed_by": None, "claimed_at": None}
+            reported,
+            path,
+            paths.backlog,
+            {"status": "backlog", "claimed_by": None, "claimed_at": None, "generation": 0},
         )
         _emit_dashboard_event(paths, "task_replied", task_id, task.claimed_by)
         return updated.model_dump(mode="json")
@@ -214,6 +217,7 @@ def create_app(hub_dir: Path) -> FastAPI:
                 "claimed_by": None,
                 "claimed_at": None,
                 "assigned_to": new_assigned_to,
+                "generation": 0,
             },
         )
         _emit_dashboard_event(

@@ -5,8 +5,9 @@ from pathlib import Path
 import pytest
 
 from agenthub import hubfs
+from agenthub.schema import WorkspaceInfo
 from agenthub.scheduler import Scheduler
-from conftest import FakeClock, FakeRunner, make_task, put_task, read_events
+from conftest import FakeClock, FakeRunner, make_task, put_task, read_events, write_config
 
 
 def test_empty_backlog_noop(scheduler: Scheduler, hub_dir: Path):
@@ -190,7 +191,51 @@ def test_global_cap_blocks_third_task(scheduler: Scheduler, hub_dir: Path):
     assert (hub_dir / "tasks" / "backlog" / "T-20260826-022.md").exists()
 
 
-def test_project_cap_blocks_second_task_same_project(scheduler: Scheduler, hub_dir: Path):
+def test_two_coding_tasks_same_project_run_in_parallel_when_branch_base_cap_allows(
+    hub_dir: Path, runner: FakeRunner, clock: FakeClock
+):
+    write_config(hub_dir, max_concurrent_global=2, max_concurrent_per_branch_base=2)
+    scheduler = Scheduler.from_hub_dir(hub_dir, runner, clock)
+
+    put_task(hub_dir, "backlog", make_task(id="T-20260826-060", project="proj-a"))
+    put_task(hub_dir, "backlog", make_task(id="T-20260826-061", project="proj-a"))
+
+    scheduler.tick()
+
+    assert (hub_dir / "tasks" / "in-progress" / "claude" / "T-20260826-060.md").exists()
+    assert (hub_dir / "tasks" / "in-progress" / "codex" / "T-20260826-061.md").exists()
+    assert list((hub_dir / "tasks" / "backlog").glob("*.md")) == []
+
+
+def test_review_task_does_not_consume_the_branch_base_write_slot(scheduler: Scheduler, hub_dir: Path):
+    coding = make_task(id="T-20260826-062", project="proj-a", claimed_by="claude", status="in-progress")
+    put_task(hub_dir, "in-progress/claude", coding)
+    put_task(hub_dir, "backlog", make_task(id="T-20260826-063", project="proj-a", type="review"))
+
+    scheduler.tick()
+
+    assert (hub_dir / "tasks" / "in-progress" / "codex" / "T-20260826-063.md").exists()
+
+
+def test_stale_branch_base_on_a_requeued_task_cannot_bypass_the_write_slot_cap(
+    scheduler: Scheduler, hub_dir: Path
+):
+    running = make_task(id="T-20260826-064", project="proj-a", claimed_by="claude", status="in-progress")
+    put_task(hub_dir, "in-progress/claude", running)
+    requeued = make_task(
+        id="T-20260826-065",
+        project="proj-a",
+        workspace=WorkspaceInfo(branch_base="main"),
+    )
+    put_task(hub_dir, "backlog", requeued)
+
+    scheduler.tick()
+
+    assert (hub_dir / "tasks" / "backlog" / "T-20260826-065.md").exists()
+    assert list((hub_dir / "tasks" / "in-progress" / "codex").glob("*.md")) == []
+
+
+def test_branch_base_cap_blocks_second_task_same_project(scheduler: Scheduler, hub_dir: Path):
     t1 = make_task(id="T-20260826-030", project="proj-a", claimed_by="claude", status="in-progress")
     put_task(hub_dir, "in-progress/claude", t1)
 
@@ -238,7 +283,7 @@ def test_capability_routing_respects_project_allowed_agents(scheduler: Scheduler
         assert list((hub_dir / "tasks" / "in-progress" / other).glob("*.md")) == []
 
 
-def test_same_tick_project_cap_limits_two_new_candidates_to_one(scheduler: Scheduler, hub_dir: Path):
+def test_same_tick_branch_base_cap_limits_two_new_candidates_to_one(scheduler: Scheduler, hub_dir: Path):
     t1 = make_task(id="T-20260826-050", project="proj-a", skills_required=["general"])
     put_task(hub_dir, "backlog", t1)
     t2 = make_task(id="T-20260826-051", project="proj-a", skills_required=["general"])
@@ -381,3 +426,32 @@ def test_assigned_to_cannot_force_a_task_type_the_agent_does_not_support(
 
     assert (hub_dir / "tasks" / "backlog" / "T-20260827-005.md").exists()
     assert (hub_dir / "tasks" / "backlog" / "T-20260827-006.md").exists()
+
+
+def test_in_progress_review_task_does_not_occupy_a_write_slot(scheduler: Scheduler, hub_dir: Path):
+    running_review = make_task(
+        id="T-20260826-066",
+        project="proj-a",
+        type="review",
+        claimed_by="claude",
+        status="in-progress",
+    )
+    put_task(hub_dir, "in-progress/claude", running_review)
+    put_task(hub_dir, "backlog", make_task(id="T-20260826-067", project="proj-a"))
+
+    scheduler.tick()
+
+    assert (hub_dir / "tasks" / "in-progress" / "codex" / "T-20260826-067.md").exists()
+
+
+def test_review_dispatched_in_the_same_tick_does_not_consume_the_write_slot(
+    scheduler: Scheduler, hub_dir: Path
+):
+    put_task(hub_dir, "backlog", make_task(id="T-20260826-068", project="proj-a", type="review"))
+    put_task(hub_dir, "backlog", make_task(id="T-20260826-069", project="proj-a"))
+
+    scheduler.tick()
+
+    assert (hub_dir / "tasks" / "in-progress" / "claude" / "T-20260826-068.md").exists()
+    assert (hub_dir / "tasks" / "in-progress" / "codex" / "T-20260826-069.md").exists()
+    assert list((hub_dir / "tasks" / "backlog").glob("*.md")) == []

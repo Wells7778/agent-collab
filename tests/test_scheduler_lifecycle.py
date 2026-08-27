@@ -352,3 +352,151 @@ def test_generation_at_boundary_still_requeues_not_blocks(scheduler: Scheduler, 
     dest = hub_dir / "tasks" / "backlog" / f"{task_id}.md"
     assert dest.exists()
     assert hubfs.read_task(dest).generation == 3
+
+
+def test_agent_exit_without_any_report_emits_task_no_report(
+    scheduler: Scheduler, hub_dir: Path, runner: FakeRunner
+):
+    task_id = "T-20260826-180"
+    dispatch_task(scheduler, hub_dir, task_id)
+    runner.script_poll(task_id, [PollResult(exited=True, stdout="chatter with no report at all")])
+
+    scheduler.tick()
+
+    events = [e for e in read_events(hub_dir) if e.event == "task_no_report"]
+    assert [e.task_id for e in events] == [task_id]
+    assert events[0].detail["report_blocks"] == 0
+    assert events[0].detail["parse_errors"] == 0
+    assert (hub_dir / "tasks" / "backlog" / f"{task_id}.md").exists()
+
+
+def test_malformed_report_block_emits_report_parse_failed_and_counts_toward_no_report(
+    scheduler: Scheduler, hub_dir: Path, runner: FakeRunner
+):
+    task_id = "T-20260826-181"
+    dispatch_task(scheduler, hub_dir, task_id)
+    stdout = "```hub-report\n{not valid json,,,}\n```"
+    runner.script_poll(task_id, [PollResult(exited=True, stdout=stdout)])
+
+    scheduler.tick()
+
+    events = read_events(hub_dir)
+    parse_failures = [e for e in events if e.event == "report_parse_failed"]
+    assert [e.task_id for e in parse_failures] == [task_id]
+    assert "invalid json" in parse_failures[0].detail["error"]
+
+    no_report = [e for e in events if e.event == "task_no_report"]
+    assert no_report[0].detail["report_blocks"] == 1
+    assert no_report[0].detail["parse_errors"] == 1
+
+
+def test_report_block_failing_schema_validation_is_reported_separately(
+    scheduler: Scheduler, hub_dir: Path, runner: FakeRunner
+):
+    task_id = "T-20260826-182"
+    dispatch_task(scheduler, hub_dir, task_id)
+    stdout = hub_report_block({"kind": "final", "task_id": task_id, "result": "completed"})
+    runner.script_poll(task_id, [PollResult(exited=True, stdout=stdout)])
+
+    scheduler.tick()
+
+    parse_failures = [e for e in read_events(hub_dir) if e.event == "report_parse_failed"]
+    assert "schema validation failed" in parse_failures[0].detail["error"]
+
+
+def test_task_no_report_detail_counts_are_not_interchangeable(
+    scheduler: Scheduler, hub_dir: Path, runner: FakeRunner
+):
+    task_id = "T-20260826-183"
+    dispatch_task(scheduler, hub_dir, task_id)
+    stdout = "\n".join(
+        [
+            hub_report_block(
+                {"kind": "checkpoint", "task_id": task_id, "summary": "s", "report_md": "m"}
+            ),
+            "```hub-report\n{broken,,,}\n```",
+        ]
+    )
+    runner.script_poll(task_id, [PollResult(exited=True, stdout=stdout)])
+
+    scheduler.tick()
+
+    event = next(e for e in read_events(hub_dir) if e.event == "task_no_report")
+    assert event.agent == "claude"
+    assert event.detail["report_blocks"] == 2
+    assert event.detail["parse_errors"] == 1
+    assert event.detail["stdout_bytes"] == len(stdout)
+
+
+def test_every_malformed_block_emits_its_own_report_parse_failed(
+    scheduler: Scheduler, hub_dir: Path, runner: FakeRunner
+):
+    task_id = "T-20260826-184"
+    dispatch_task(scheduler, hub_dir, task_id)
+    stdout = "```hub-report\n{first,,,}\n```\n```hub-report\n{second,,,}\n```"
+    runner.script_poll(task_id, [PollResult(exited=True, stdout=stdout)])
+
+    scheduler.tick()
+
+    failures = [e for e in read_events(hub_dir) if e.event == "report_parse_failed"]
+    assert len(failures) == 2
+    assert "first" in failures[0].detail["error"]
+    assert "second" in failures[1].detail["error"]
+
+
+def test_malformed_block_is_reported_even_when_a_valid_final_follows(
+    scheduler: Scheduler, hub_dir: Path, runner: FakeRunner
+):
+    task_id = "T-20260826-185"
+    dispatch_task(scheduler, hub_dir, task_id)
+    stdout = "\n".join(
+        [
+            "```hub-report\n{broken,,,}\n```",
+            hub_report_block(
+                {
+                    "kind": "final",
+                    "task_id": task_id,
+                    "result": "completed",
+                    "summary": "done",
+                    "report_md": "ok",
+                    "pr_url": "https://example/pr/9",
+                }
+            ),
+        ]
+    )
+    runner.script_poll(task_id, [PollResult(exited=True, stdout=stdout)])
+
+    scheduler.tick()
+
+    events = read_events(hub_dir)
+    assert [e.event for e in events if e.event == "report_parse_failed"] == ["report_parse_failed"]
+    assert not [e for e in events if e.event == "task_no_report"]
+    assert (hub_dir / "tasks" / "review" / f"{task_id}.md").exists()
+
+
+def test_rate_limited_exit_is_not_counted_as_a_missing_report(
+    scheduler: Scheduler, hub_dir: Path, runner: FakeRunner
+):
+    task_id = "T-20260826-186"
+    dispatch_task(scheduler, hub_dir, task_id)
+    runner.script_poll(
+        task_id, [PollResult(exited=True, stdout="", rate_limited=True, rate_limit_reset_at=None)]
+    )
+
+    scheduler.tick()
+
+    events = read_events(hub_dir)
+    assert not [e for e in events if e.event == "task_no_report"]
+    assert [e.event for e in events if e.event == "agent_rate_limited"] == ["agent_rate_limited"]
+
+
+def test_truncate_keeps_a_readable_prefix_of_the_offending_block():
+    from agenthub.scheduler import _truncate
+
+    assert _truncate("short block") == "short block"
+    assert _truncate("a\n  b\tc") == "a b c"
+    long_block = "x" * 500
+    truncated = _truncate(long_block)
+    assert truncated.startswith("x" * 200)
+    assert len(truncated) == 201
+    assert truncated.endswith("…")
