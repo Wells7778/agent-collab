@@ -105,6 +105,9 @@ agents:
   # 查詢型角色:只接 research 任務,不寫程式。
   # agy 的 prompt 走參數而非 stdin,故經 bin/agy-hub-runner 轉接;
   # 請把下面的路徑換成你 clone 本 repo 的絕對路徑。
+  # ⚠️ headless 模式下每個 CLI 都需要自己的「免詢問」旗標,否則它會靜默
+  # 自動拒絕工具授權並輸出 0 byte:agy 用 --dangerously-skip-permissions、
+  # claude 同名、codex 用 --sandbox、hermes 用 --yolo。漏了就永遠跑不起來。
   researcher:
     enabled: false
     runtime: agy
@@ -120,5 +123,6 @@ agents:
         gemini-3.7-flash-high,
         --print-timeout,
         10m,
+        --dangerously-skip-permissions,
       ]
     probe: [agy, --help]
