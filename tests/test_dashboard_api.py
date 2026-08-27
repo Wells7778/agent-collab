@@ -939,3 +939,69 @@ def test_dispatch_review_auto_pick_skips_disabled_reviewers(client: TestClient, 
 
     assert res.status_code == 200
     assert res.json()["assigned_to"] == "third-reviewer"
+
+
+def test_status_reports_the_runtime_and_the_model_actually_on_the_command(
+    client: TestClient, hub_dir: Path
+):
+    from conftest import write_config
+
+    write_config(
+        hub_dir,
+        agents={
+            "researcher": {
+                "enabled": True,
+                "runtime": "agy",
+                "skills": ["research"],
+                "task_types": ["research"],
+                "command": ["caffeinate", "-i", "agy-runner", "--model", "gemini-3.7-flash-high"],
+            },
+            "verifier": {
+                "enabled": True,
+                "runtime": "codex",
+                "skills": ["general"],
+                "task_types": ["review"],
+                "command": ["codex", "exec", "--json"],
+            },
+        },
+    )
+    now = datetime.now(timezone.utc)
+    for agent in ("researcher", "verifier"):
+        hubfs.write_status(
+            hub_dir / "status" / f"{agent}.json",
+            AgentStatus(agent=agent, state="idle", heartbeat_at=now),
+        )
+
+    rows = {s["agent"]: s for s in client.get("/api/status").json()}
+
+    assert rows["researcher"]["runtime"] == "agy"
+    assert rows["researcher"]["model"] == "gemini-3.7-flash-high"
+    assert rows["verifier"]["runtime"] == "codex"
+    assert rows["verifier"]["model"] is None
+
+
+def test_status_model_is_read_from_the_command_not_a_separate_declaration(
+    client: TestClient, hub_dir: Path
+):
+    from conftest import write_config
+
+    write_config(
+        hub_dir,
+        agents={
+            "explorer": {
+                "enabled": True,
+                "runtime": "hermes",
+                "skills": ["general"],
+                "task_types": ["explore"],
+                "command": ["hermes", "chat", "-m", "gemma-4-26B-A4B-it-MLX-4bit", "--yolo"],
+            }
+        },
+    )
+    hubfs.write_status(
+        hub_dir / "status" / "explorer.json",
+        AgentStatus(agent="explorer", state="idle", heartbeat_at=datetime.now(timezone.utc)),
+    )
+
+    row = client.get("/api/status").json()[0]
+
+    assert row["model"] == "gemma-4-26B-A4B-it-MLX-4bit"

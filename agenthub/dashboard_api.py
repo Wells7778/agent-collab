@@ -93,11 +93,20 @@ def create_app(hub_dir: Path) -> FastAPI:
         status_dir = paths.status_dir
         if not status_dir.is_dir():
             return []
+        config = hubfs.load_config(paths.config_file)
         result = []
         for path in sorted(status_dir.glob("*.json")):
             status = hubfs.read_status(path)
-            if status is not None:
-                result.append(status.model_dump(mode="json"))
+            if status is None:
+                continue
+            agent_config = config.agents.get(status.agent)
+            result.append(
+                {
+                    **status.model_dump(mode="json"),
+                    "runtime": agent_config.runtime if agent_config is not None else None,
+                    "model": _model_on_command(agent_config.command) if agent_config else None,
+                }
+            )
         return result
 
     @app.get("/api/events")
@@ -307,6 +316,16 @@ def create_app(hub_dir: Path) -> FastAPI:
         return review_task.model_dump(mode="json")
 
     return app
+
+
+_MODEL_FLAGS = ("--model", "-m", "--models")
+
+
+def _model_on_command(command: list[str]) -> str | None:
+    for flag, value in zip(command, command[1:]):
+        if flag in _MODEL_FLAGS:
+            return value
+    return None
 
 
 def _runtime_of(config, agent: str | None) -> str | None:
