@@ -5,6 +5,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Iterator, Protocol
 
@@ -14,6 +15,7 @@ from agenthub.schema import (
     HubConfig,
     HubReport,
     ProjectConfig,
+    SourceInfo,
     TaskFile,
     TaskFileParseError,
     WorkspaceInfo,
@@ -50,6 +52,8 @@ class AgentRunner(Protocol):
     def is_alive(self, pid: int, started_at: datetime) -> bool: ...
 
     def checkpoint_workspace(self, handle: RunHandle) -> None: ...
+
+    def changed_files(self, task: TaskFile, agent_name: str) -> list[str] | None: ...
 
 
 class Clock(Protocol):
@@ -374,7 +378,90 @@ class Scheduler:
         hubfs.transition(finished, task_path, dest_dir, {"status": dest_status})
 
         self._emit(event, task.id, agent, {"result": report.result})
+        if report.result == "completed":
+            if task.type == "review":
+                self._append_review_report_to_related_task(task, agent, report)
+            else:
+                self._create_review_pair(finished, agent)
         self._finish_running(task.id)
+
+    def _create_review_pair(self, task: TaskFile, agent: str) -> None:
+        project_cfg = self.projects.get(task.project)
+        if project_cfg is None or not project_cfg.spec_paths:
+            return
+        changed = self.runner.changed_files(task, agent)
+        if changed is None:
+            self._emit(
+                "review_pair_unavailable",
+                task.id,
+                agent,
+                {"eligible": [], "reason": "could not determine which files changed"},
+            )
+            return
+        if not any(
+            fnmatch(path, pattern) for path in changed for pattern in project_cfg.spec_paths
+        ):
+            return
+
+        reviewers = self._eligible_reviewers(agent, project_cfg)
+        if len(reviewers) < 2:
+            self._emit(
+                "review_pair_unavailable",
+                task.id,
+                agent,
+                {"eligible": reviewers, "reason": "fewer than two reviewers with a distinct runtime"},
+            )
+            return
+
+        for reviewer in reviewers[:2]:
+            self._create_review_task(task, reviewer)
+
+    def _eligible_reviewers(self, agent: str, project_cfg: ProjectConfig) -> list[str]:
+        author_cfg = self.config.agents.get(agent)
+        author_runtime = author_cfg.runtime if author_cfg is not None else None
+        return [
+            name
+            for name in project_cfg.allowed_agents
+            if name != agent
+            and (cfg := self.config.agents.get(name)) is not None
+            and cfg.enabled
+            and "review" in cfg.task_types
+            and (author_runtime is None or cfg.runtime != author_runtime)
+        ]
+
+    def _create_review_task(self, task: TaskFile, reviewer: str) -> None:
+        review_id = f"{task.id}-review-{reviewer}"
+        branch = task.workspace.branch or "(未知分支)"
+        pr_url = hubfs.extract_pr_url(task.report_md) or "(無 PR,見分支)"
+        review_task = TaskFile(
+            id=review_id,
+            type="review",
+            title=f"互審({reviewer}):{task.title}",
+            source=SourceInfo(type="manual"),
+            project=task.project,
+            skills_required=task.skills_required,
+            priority=task.priority,
+            assigned_to=reviewer,
+            related_task=task.id,
+            requirement_md=f"審查 {task.id} 的變更。\n\n分支:{branch}\nPR:{pr_url}",
+            acceptance_md="- [ ] 審查報告已寫回 final 回報的 report_md(不開 PR、不留 PR comment)",
+        )
+        hubfs.write_task(self.paths.backlog / f"{review_id}.md", review_task)
+        self._emit("review_task_created", review_id, reviewer, {"related_task": task.id})
+
+    def _append_review_report_to_related_task(
+        self, task: TaskFile, agent: str, report: HubReport
+    ) -> None:
+        if task.related_task is None:
+            return
+        related_path = self.paths.review / f"{task.related_task}.md"
+        if not related_path.is_file():
+            return
+        entry = (
+            f"### 互審回報({agent}) {self.clock.now().isoformat()} — {report.summary}\n\n"
+            f"{report.report_md}\n"
+        )
+        hubfs.write_task(related_path, hubfs.read_task(related_path).with_report_appended(entry))
 
     def _handle_blocked(self, task: TaskFile, task_path: Path, agent: str, report: HubReport) -> None:
         content = f"# 提問:{task.id} ({agent})\n\n{report.question}\n"

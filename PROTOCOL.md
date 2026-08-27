@@ -33,7 +33,7 @@ backlog → in-progress/<agent> → review → done
 ```yaml
 ---
 id: T-20260826-001
-type: coding                # coding | review(互審,由 dashboard 產生)| research(查詢資料,不改碼)
+type: coding                # coding | review(互審)| research(查資料)| explore(盤點程式碼)
 title: 一句話說清楚要做什麼
 source:
   type: manual              # manual | asana(內容出自某張 Asana 票)
@@ -64,7 +64,7 @@ status: backlog             # 僅供顯示:backlog|in-progress|blocked|review|do
 
 ## 4. Agent 執行契約(你要遵守的全部)
 
-1. 啟動注入:你會收到本協定全文、任務檔全文、最新 handoff(若有)、knowledge projection 路徑(唯讀)。
+1. 啟動注入,依序是:本協定全文 → **你的角色定義** → knowledge projection 路徑(唯讀)→ 任務檔全文 → 最新 handoff(若有)。三層各有分工,不會互相覆蓋:本協定寫檔案系統契約、回報格式與狀態機;角色定義寫你的職責、產出格式與越界禁令;knowledge 寫專案慣例與領域知識。三者衝突時以本協定為準,並在回報裡指出衝突。
 2. 有 handoff 先讀,從斷點續作;禁止重做已完成項。
 3. 只在任務檔 `workspace.branch` 指定的分支工作;禁止碰其他分支、禁止 force push、禁止動 base 分支。
 4. 跨專案知識只查給定的 projection 路徑(hub/knowledge/<slug>/);禁止讀寫 obs 本體(~/Documents/obs)。
@@ -73,7 +73,7 @@ status: backlog             # 僅供顯示:backlog|in-progress|blocked|review|do
 7. 卡關:需要人類決策(需求矛盾、權限不足、環境壞掉)→ 輸出 blocked 回報(question 寫清楚問題與已嘗試方案)後結束 session;禁止空轉瞎猜。
 8. 完成(type: coding):依驗收標準跑測試(關鍵輸出行放進報告)→ push `workspace.branch` → 開 CodeCommit PR:先查同分支既有 open PR,有則沿用其 URL,無則 create(冪等;`aws codecommit create-pull-request`,無 GitHub 無 `gh`)→ 輸出 final 回報。
 9. 完成(type: review):checkout 指定 branch 審查;不開 PR、不留 PR comment;完整審查報告放 final 回報的 report_md。
-10. 完成(type: research):查資料回答問題;禁止改碼、禁止 commit/push、不開 PR。答案放 final 回報的 report_md,每個關鍵事實附來源 URL;查不到就寫查不到,禁止憑記憶補。
+10. 完成(type: research / explore):查資料或盤點程式碼;禁止改碼、禁止 commit/push、不開 PR。產出放 final 回報的 report_md——research 的每個關鍵事實附來源 URL,explore 的每個位置附 `檔案:行`;查不到就寫查不到,禁止憑記憶補。
 11. 誠實回報:測試紅就說紅;做不到就 blocked;禁止樂觀宣稱、禁止無證據的「應該沒問題」。
 
 ## 5. stdout 回報格式(你唯一的回報通道)
@@ -90,7 +90,7 @@ fenced code block,語言標記固定 `hub-report`,內容為單一 JSON object:
 |---|---|---|
 | checkpoint | summary, report_md | daemon 即時 append 進任務檔執行報告 |
 | blocked | question | daemon 代寫 messages/ 一則,任務移到 blocked/ |
-| final | result(`completed`/`failed`), summary, report_md;coding 完成另必填 pr_url | completed:coding 與 research → review/、review 型 → done/;failed → review/ 由人裁決 |
+| final | result(`completed`/`failed`), summary, report_md;coding 完成另必填 pr_url | completed:coding/research/explore → review/、review 型 → done/;failed → review/ 由人裁決 |
 
 - daemon 以 stdout 中「最後一個 hub-report block」為 session 結論;之前的 checkpoint 各自即時生效。
 - coding final 的 pr_url 必填目前由人工於 review 把關;機械強制留待 PR 佈建階段實作。
@@ -143,11 +143,14 @@ fenced code block,語言標記固定 `hub-report`,內容為單一 JSON object:
 - `review` 任務是唯讀的,不佔寫入槽;寫入槽的 key 一律取自 projects.yaml 的 `default_branch`,不看任務檔上可能過期的 `workspace.branch_base`。
 - 人類介入(dashboard 的 reply 與 return)把任務送回 backlog 時 generation 歸零——介入等於提供新資訊,重試預算重新計算。
 - `assigned_to` 只繞過能力路由(skills 比對與 allowed_agents);agent enabled 與各併發上限是系統不變量,一律強制。
+- **成對驗收**:coding 任務回報 completed 時,daemon 比對變更檔案與 projects.yaml 的 `spec_paths`。命中就自動生成 verifier + test-auditor 兩張互審票,且強制指派給與實作者**不同 runtime** 的角色;湊不出兩個獨立審查者、或連變更檔案清單都取不到(git 失敗)時,都發 `review_pair_unavailable` 事件而不降級放行——取不到清單會讓判定退化成「沒動測試」,若靜默處理等於保證無聲消失。兩張票都通過後原任務仍留在 review/ 等人裁決——「存活的突變是否可接受」是人的判斷,不是 hub 的。
 - 任務逾時 120 分鐘(系統睡眠不計,喚醒後給 grace period);心跳 60 秒。
 - 回收:kill pgid → 未提交 WIP commit 成 checkpoint → generation +1 → 退回 backlog(沿用原 worktree,自分支尖端續作)。
 - generation 達 max_generation(預設 3)仍失敗 → 任務移到 blocked/ 並代寫 message,交人裁決(刻意保留 claimed_by 與 workspace.branch 供人工鑑識;重派時由 daemon 全量覆寫)。
 - done/cancelled 任務的 worktree 保留 7 天後清理。
 
 ## 10. 邊界聲明
+
+config.yaml 的 `agents:` 條目是**角色**(implementer / verifier / test-auditor / explorer / researcher),不是 LLM 廠牌;底層跑哪個 CLI 由該角色的 `runtime` 與 `command` 決定(`runtime` 對 enabled 的角色是必填,漏填直接載入失敗)。**`runtime` 與 `command` 的一致性沒有機械檢查**——因為 CLI 常經 wrapper 轉接,自動比對會誤殺合法設定。這是靠人維持的不變量:填錯不會有人發現,但「成對驗收跨廠牌」的保證會靜默失效。同一個 runtime 可以承載多個角色,不同角色也可以換到別的 runtime——這正是成對驗收能跨廠牌執行的前提。
 
 knowledge projection 與本協定是**維護邊界,不是安全邊界**:同帳號下防意外不防惡意。需要真隔離時升級獨立 OS user 或容器。

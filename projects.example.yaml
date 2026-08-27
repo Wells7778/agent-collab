@@ -17,14 +17,19 @@ my-service:
   # 供人撰寫驗收標準時參考;daemon 不會自動執行。
   test: ["npm test"]
 
+  # 實作任務完成時,daemon 用這些 glob 比對變更檔案清單。命中就自動生成
+  # verifier + test-auditor 兩張互審票(強制與實作者不同 runtime);
+  # 沒命中(純文件、設定、revert)就直接進 review 等人工。
+  spec_paths: ["test/**", "**/*.test.js"]
+
   # 唯讀知識投影:daemon 以 rsync 同步到 knowledge/<project>/,
   # agent 只能讀投影,碰不到來源目錄。
   knowledge_paths:
     - ~/notes/projects/my-service/
 
-  allowed_agents: [claude, codex]
+  allowed_agents: [implementer, verifier, test-auditor]
 
-# 查詢型任務建議獨立掛一個沒有 setup 的專案:research 任務也會開 worktree,
+# 查詢型角色建議獨立掛一個沒有 setup 的專案:research/explore 任務也會開 worktree,
 # 掛在有重編譯步驟的專案下會先跑完整個 build 才開始查資料。
 research-desk:
   repo: /path/to/a/small/local/repo
@@ -33,4 +38,4 @@ research-desk:
   setup: []
   test: []
   knowledge_paths: []
-  allowed_agents: [agy]
+  allowed_agents: [researcher, explorer]

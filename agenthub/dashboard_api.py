@@ -24,7 +24,7 @@ class CreateTaskRequest(BaseModel):
 
     title: NonEmptyText
     project: str
-    type: Literal["coding", "research"] = "coding"
+    type: Literal["coding", "research", "explore"] = "coding"
     requirement_md: NonEmptyText
     acceptance_md: NonEmptyText
     skills_required: list[str] = Field(default_factory=list)
@@ -239,14 +239,18 @@ def create_app(hub_dir: Path) -> FastAPI:
         task_id: str, req: ReviewDispatchRequest | None = Body(default=None)
     ) -> dict:
         _, task, _ = _require_task_in(paths, task_id, [("review", paths.review)])
+        config = hubfs.load_config(paths.config_file)
+        author_runtime = _runtime_of(config, task.claimed_by)
         assigned_to = req.assigned_to if req is not None else None
-        if assigned_to is not None and assigned_to == task.claimed_by:
+        if assigned_to is not None and not _is_independent_reviewer(
+            config, assigned_to, task.claimed_by, author_runtime
+        ):
+            conflict = "runtime" if assigned_to != task.claimed_by else "role"
             raise HTTPException(
                 status_code=409,
-                detail=f"review must be assigned to a different agent than {task.claimed_by}",
+                detail=f"review must not share the {conflict} of {task.claimed_by}",
             )
         if assigned_to is None and task.claimed_by is not None:
-            config = hubfs.load_config(paths.config_file)
             project = hubfs.load_projects(paths.projects_file).get(task.project)
             required_skills = set(task.skills_required)
             candidates = project.allowed_agents if project is not None else []
@@ -254,7 +258,7 @@ def create_app(hub_dir: Path) -> FastAPI:
                 (
                     agent
                     for agent in candidates
-                    if agent != task.claimed_by
+                    if _is_independent_reviewer(config, agent, task.claimed_by, author_runtime)
                     and (agent_config := config.agents.get(agent)) is not None
                     and agent_config.enabled
                     and required_skills.issubset(set(agent_config.skills))
@@ -303,6 +307,23 @@ def create_app(hub_dir: Path) -> FastAPI:
         return review_task.model_dump(mode="json")
 
     return app
+
+
+def _runtime_of(config, agent: str | None) -> str | None:
+    if agent is None:
+        return None
+    agent_config = config.agents.get(agent)
+    return agent_config.runtime if agent_config is not None else None
+
+
+def _is_independent_reviewer(
+    config, reviewer: str, author: str | None, author_runtime: str | None
+) -> bool:
+    if reviewer == author:
+        return False
+    if author_runtime is None:
+        return True
+    return _runtime_of(config, reviewer) != author_runtime
 
 
 def _task_summary(task: TaskFile) -> dict:

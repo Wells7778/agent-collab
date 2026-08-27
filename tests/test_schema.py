@@ -84,3 +84,18 @@ def test_hub_report_final_requires_result_summary_report_md():
 def test_hub_report_rejects_each_missing_required_field(payload):
     with pytest.raises(ValidationError):
         HubReport(**payload)
+
+
+def test_enabled_role_without_a_runtime_is_rejected():
+    from pydantic import ValidationError
+
+    from agenthub.schema import AgentConfig
+
+    with pytest.raises(ValidationError, match="must declare `runtime`"):
+        AgentConfig.model_validate({"enabled": True, "skills": ["general"]})
+
+
+def test_disabled_role_may_omit_its_runtime():
+    from agenthub.schema import AgentConfig
+
+    assert AgentConfig.model_validate({"enabled": False}).runtime is None

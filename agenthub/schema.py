@@ -7,7 +7,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-TaskType = Literal["coding", "review", "research"]
+TaskType = Literal["coding", "review", "research", "explore"]
 Priority = Literal["P0", "P1", "P2", "P3"]
 TaskStatus = Literal["backlog", "in-progress", "blocked", "review", "done", "cancelled"]
 AgentState = Literal["working", "idle", "resting", "offline"]
@@ -38,6 +38,7 @@ EventType = Literal[
     "task_completed",
     "task_cancelled",
     "review_task_created",
+    "review_pair_unavailable",
 ]
 
 DEFAULT_AGENT_PROBE = ["claude", "--version"]
@@ -187,10 +188,21 @@ class AgentConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool
+    runtime: str | None = None
+    prompt: str | None = None
     skills: list[str] = Field(default_factory=list)
     task_types: list[TaskType] = Field(default_factory=lambda: ["coding", "review"])
     command: list[str] = Field(default_factory=lambda: DEFAULT_AGENT_COMMAND)
     probe: list[str] = Field(default_factory=lambda: DEFAULT_AGENT_PROBE)
+
+    @model_validator(mode="after")
+    def _enabled_role_declares_its_runtime(self) -> "AgentConfig":
+        if self.enabled and self.runtime is None:
+            raise ValueError(
+                "an enabled role must declare `runtime`; "
+                "pair review relies on it to keep reviewers off the author's runtime"
+            )
+        return self
 
 
 class HubConfig(BaseModel):
@@ -217,6 +229,7 @@ class ProjectConfig(BaseModel):
     setup: list[str] = Field(default_factory=list)
     setup_secrets: list[str] = Field(default_factory=list)
     test: list[str] = Field(default_factory=list)
+    spec_paths: list[str] = Field(default_factory=list)
     knowledge_paths: list[str] = Field(default_factory=list)
     allowed_agents: list[str] = Field(default_factory=list)
 

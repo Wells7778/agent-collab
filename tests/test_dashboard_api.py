@@ -556,7 +556,7 @@ def test_dispatch_review_rejects_original_implementer(client: TestClient, hub_di
     res = client.post("/api/tasks/T-1/review", json={"assigned_to": "claude"})
 
     assert res.status_code == 409
-    assert res.json()["detail"] == "review must be assigned to a different agent than claude"
+    assert res.json()["detail"] == "review must not share the role of claude"
     assert hubfs.list_task_files(hub_dir / "tasks" / "backlog") == []
 
 
@@ -842,3 +842,100 @@ def test_return_resets_generation(client: TestClient, hub_dir: Path):
     assert res.status_code == 200
     assert res.json()["generation"] == 0
     assert hubfs.read_task(hub_dir / "tasks" / "backlog" / "T-1.md").generation == 0
+
+
+RUNTIME_AWARE_AGENTS = {
+    "implementer": {"enabled": True, "runtime": "claude", "skills": ["general"], "task_types": ["coding"]},
+    "same-runtime-reviewer": {
+        "enabled": True,
+        "runtime": "claude",
+        "skills": ["general"],
+        "task_types": ["review"],
+    },
+    "other-runtime-reviewer": {
+        "enabled": True,
+        "runtime": "codex",
+        "skills": ["general"],
+        "task_types": ["review"],
+    },
+}
+
+
+def _runtime_aware_hub(hub_dir: Path) -> None:
+    from conftest import DEFAULT_PROJECTS, write_config, write_projects
+
+    write_config(hub_dir, agents=RUNTIME_AWARE_AGENTS)
+    projects = json.loads(json.dumps(DEFAULT_PROJECTS))
+    projects["proj-a"]["allowed_agents"] = [
+        "implementer",
+        "same-runtime-reviewer",
+        "other-runtime-reviewer",
+    ]
+    write_projects(hub_dir, projects)
+
+
+def test_dispatch_review_rejects_a_reviewer_sharing_the_implementer_runtime(
+    client: TestClient, hub_dir: Path
+):
+    _runtime_aware_hub(hub_dir)
+    put_task(
+        hub_dir, "review", make_task(id="T-1", status="review", claimed_by="implementer")
+    )
+
+    res = client.post("/api/tasks/T-1/review", json={"assigned_to": "same-runtime-reviewer"})
+
+    assert res.status_code == 409
+    assert res.json()["detail"] == "review must not share the runtime of implementer"
+
+
+def test_dispatch_review_auto_pick_skips_reviewers_on_the_implementer_runtime(
+    client: TestClient, hub_dir: Path
+):
+    _runtime_aware_hub(hub_dir)
+    put_task(
+        hub_dir, "review", make_task(id="T-1", status="review", claimed_by="implementer")
+    )
+
+    res = client.post("/api/tasks/T-1/review", json={})
+
+    assert res.status_code == 200
+    assert res.json()["assigned_to"] == "other-runtime-reviewer"
+
+
+def test_dispatch_review_still_blocks_self_review_when_the_author_is_unknown_to_config(
+    client: TestClient, hub_dir: Path
+):
+    _runtime_aware_hub(hub_dir)
+    put_task(hub_dir, "review", make_task(id="T-1", status="review", claimed_by="retired-role"))
+
+    res = client.post("/api/tasks/T-1/review", json={"assigned_to": "retired-role"})
+
+    assert res.status_code == 409
+    assert res.json()["detail"] == "review must not share the role of retired-role"
+
+
+def test_dispatch_review_auto_pick_skips_disabled_reviewers(client: TestClient, hub_dir: Path):
+    from conftest import DEFAULT_PROJECTS, write_config, write_projects
+
+    agents = json.loads(json.dumps(RUNTIME_AWARE_AGENTS))
+    agents["other-runtime-reviewer"]["enabled"] = False
+    agents["third-reviewer"] = {
+        "enabled": True,
+        "runtime": "gemini",
+        "skills": ["general"],
+        "task_types": ["review"],
+    }
+    write_config(hub_dir, agents=agents)
+    projects = json.loads(json.dumps(DEFAULT_PROJECTS))
+    projects["proj-a"]["allowed_agents"] = [
+        "implementer",
+        "other-runtime-reviewer",
+        "third-reviewer",
+    ]
+    write_projects(hub_dir, projects)
+    put_task(hub_dir, "review", make_task(id="T-1", status="review", claimed_by="implementer"))
+
+    res = client.post("/api/tasks/T-1/review", json={})
+
+    assert res.status_code == 200
+    assert res.json()["assigned_to"] == "third-reviewer"

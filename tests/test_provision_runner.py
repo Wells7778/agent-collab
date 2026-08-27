@@ -721,3 +721,145 @@ def test_detect_rate_limit_reads_nested_error_message():
     flagged, reset_at = _detect_rate_limit(raw, "")
     assert flagged is True
     assert reset_at == datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+
+def test_prompt_injects_the_role_definition_between_protocol_and_task(
+    runner_hub: Path, tmp_path: Path, bare_repo: Path, fake_claude: Path
+):
+    data = json.loads(json.dumps(DEFAULT_CONFIG))
+    data["workspaces_root"] = str(tmp_path / "workspaces")
+    data["agents"]["claude"]["command"] = [str(fake_claude)]
+    data["agents"]["claude"]["prompt"] = "templates/roles/implementer.md"
+    config = HubConfig.model_validate(data)
+    role_file = runner_hub / "templates" / "roles" / "implementer.md"
+    role_file.parent.mkdir(parents=True, exist_ok=True)
+    role_file.write_text("ROLE-DEFINITION-MARKER\n")
+
+    runner = ClaudeRunner(runner_hub, config, {"proj-a": _project_cfg(bare_repo)}, term_grace_seconds=1.0)
+    task = _branched_task("T-R-030")
+    ws = Path(config.workspaces_root) / "proj-a" / "claude" / "T-R-030"
+    runner.spawn(task, "claude", ws)
+
+    prompt = (ws.parent / "T-R-030.hub" / "prompt-g0.md").read_text()
+    assert "# 你的角色:claude" in prompt
+    assert "ROLE-DEFINITION-MARKER" in prompt
+    assert prompt.index("hub-report") < prompt.index("ROLE-DEFINITION-MARKER")
+    assert prompt.index("ROLE-DEFINITION-MARKER") < prompt.index("T-R-030")
+
+
+def test_prompt_omits_the_role_section_when_no_role_prompt_is_configured(
+    runner_hub: Path, tmp_path: Path, bare_repo: Path, fake_claude: Path
+):
+    config = _runner_config(fake_claude, tmp_path)
+    runner = ClaudeRunner(runner_hub, config, {"proj-a": _project_cfg(bare_repo)}, term_grace_seconds=1.0)
+    task = _branched_task("T-R-031")
+    ws = Path(config.workspaces_root) / "proj-a" / "claude" / "T-R-031"
+    runner.spawn(task, "claude", ws)
+
+    prompt = (ws.parent / "T-R-031.hub" / "prompt-g0.md").read_text()
+    assert "# 你的角色:" not in prompt
+    assert "T-R-031" in prompt
+
+
+def test_spawn_fails_loudly_when_the_configured_role_prompt_is_missing(
+    runner_hub: Path, tmp_path: Path, bare_repo: Path, fake_claude: Path
+):
+    data = json.loads(json.dumps(DEFAULT_CONFIG))
+    data["workspaces_root"] = str(tmp_path / "workspaces")
+    data["agents"]["claude"]["command"] = [str(fake_claude)]
+    data["agents"]["claude"]["prompt"] = "templates/roles/does-not-exist.md"
+    config = HubConfig.model_validate(data)
+
+    runner = ClaudeRunner(runner_hub, config, {"proj-a": _project_cfg(bare_repo)}, term_grace_seconds=1.0)
+    task = _branched_task("T-R-032")
+    ws = Path(config.workspaces_root) / "proj-a" / "claude" / "T-R-032"
+
+    with pytest.raises(FileNotFoundError):
+        runner.spawn(task, "claude", ws)
+
+
+def test_prompt_sections_appear_in_the_order_protocol_md_documents(
+    runner_hub: Path, tmp_path: Path, bare_repo: Path, fake_claude: Path
+):
+    knowledge_src = tmp_path / "obs" / "shared"
+    knowledge_src.mkdir(parents=True)
+    (knowledge_src / "note.md").write_text("project convention\n")
+
+    data = json.loads(json.dumps(DEFAULT_CONFIG))
+    data["workspaces_root"] = str(tmp_path / "workspaces")
+    data["agents"]["claude"]["command"] = [str(fake_claude)]
+    data["agents"]["claude"]["prompt"] = "templates/roles/implementer.md"
+    config = HubConfig.model_validate(data)
+    role_file = runner_hub / "templates" / "roles" / "implementer.md"
+    role_file.parent.mkdir(parents=True, exist_ok=True)
+    role_file.write_text("ROLE-MARKER\n")
+
+    cfg = _project_cfg(bare_repo, knowledge_paths=[str(knowledge_src)])
+    runner = ClaudeRunner(runner_hub, config, {"proj-a": cfg}, term_grace_seconds=1.0)
+    ws = Path(config.workspaces_root) / "proj-a" / "claude" / "T-R-033"
+    handoff = runner_hub / "handoffs" / "T-R-033.handoff-1.md"
+    handoff.parent.mkdir(parents=True, exist_ok=True)
+    handoff.write_text("HANDOFF-MARKER\n")
+
+    runner.spawn(_branched_task("T-R-033"), "claude", ws)
+
+    prompt = (ws.parent / "T-R-033.hub" / "prompt-g0.md").read_text()
+    order = [
+        prompt.index("PROTOCOL.md — Agent Hub 協作協定"),
+        prompt.index("# 你的角色:claude"),
+        prompt.index("# knowledge projection"),
+        prompt.index("# 任務檔"),
+        prompt.index("HANDOFF-MARKER"),
+    ]
+    assert order == sorted(order), "prompt 分層順序與 PROTOCOL.md §4 的敘述不符"
+
+
+def test_changed_files_lists_commits_on_the_branch_not_just_uncommitted_work(
+    runner_hub: Path, tmp_path: Path, bare_repo: Path, fake_claude: Path
+):
+    config = _runner_config(fake_claude, tmp_path)
+    runner = ClaudeRunner(runner_hub, config, {"proj-a": _project_cfg(bare_repo)}, term_grace_seconds=1.0)
+    task = _branched_task("T-R-040")
+    ws = Path(config.workspaces_root) / "proj-a" / "claude" / "T-R-040"
+    runner.spawn(task, "claude", ws)
+
+    (ws / "tests").mkdir(parents=True, exist_ok=True)
+    (ws / "tests" / "test_new.py").write_text("assert True\n")
+    _git(["add", "tests/test_new.py"], ws)
+    _git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "add spec"], ws)
+
+    assert runner.changed_files(task, "claude") == ["tests/test_new.py"]
+    assert "tests/test_new.py" not in _git(["diff", "--name-only", "HEAD"], ws)
+
+
+def test_changed_files_returns_empty_when_git_cannot_run(
+    runner_hub: Path, tmp_path: Path, bare_repo: Path, fake_claude: Path
+):
+    config = _runner_config(fake_claude, tmp_path)
+    runner = ClaudeRunner(runner_hub, config, {"proj-a": _project_cfg(bare_repo)}, term_grace_seconds=1.0)
+    task = _branched_task("T-R-041")
+
+    assert runner.changed_files(task, "claude") is None
+
+
+def test_changed_files_diffs_against_the_recorded_branch_base(
+    runner_hub: Path, tmp_path: Path, bare_repo: Path, fake_claude: Path
+):
+    config = _runner_config(fake_claude, tmp_path)
+    runner = ClaudeRunner(runner_hub, config, {"proj-a": _project_cfg(bare_repo)}, term_grace_seconds=1.0)
+    task = _branched_task("T-R-042")
+    ws = Path(config.workspaces_root) / "proj-a" / "claude" / "T-R-042"
+    runner.spawn(task, "claude", ws)
+    (ws / "only-on-branch.txt").write_text("x\n")
+    _git(["add", "only-on-branch.txt"], ws)
+    _git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "c"], ws)
+
+    with_base = task.model_copy(
+        update={"workspace": task.workspace.model_copy(update={"branch_base": "develop"})}
+    )
+    assert runner.changed_files(with_base, "claude") == ["only-on-branch.txt"]
+
+    with_unknown_base = task.model_copy(
+        update={"workspace": task.workspace.model_copy(update={"branch_base": "no-such-branch"})}
+    )
+    assert runner.changed_files(with_unknown_base, "claude") is None

@@ -7,7 +7,10 @@ workspaces_root: ~/agent-workspaces
 # 真正的機密走 projects.yaml 的 setup_secrets,由本機檔案複製進 workspace。
 spawn_env: {}
 
-max_concurrent_global: 2
+max_concurrent_global: 4
+
+# 同一個 (project, default_branch) 上同時進行的「寫入型」任務數。
+# review 任務是唯讀的,不佔寫入槽。
 max_concurrent_per_branch_base: 2
 max_concurrent_per_agent: 1
 
@@ -15,18 +18,27 @@ task_timeout_minutes: 120
 heartbeat_seconds: 60
 worktree_retention_days: 7
 
-# 任務被回收幾次後轉 blocked 交人處理。
+# 任務被回收幾次後轉 blocked 交人處理。人類在 dashboard 回覆或打回時會歸零。
 max_generation: 3
 
 # 偵測到 agent 撞用量上限、且對方沒給恢復時間時,讓它休息多久。
 rate_limit_cooldown_minutes: 30
 
+# 這裡的每個條目是一個「角色」,不是一個 LLM 廠牌。
+#   prompt  = 角色職責定義,相對於 hub 目錄;會疊在 PROTOCOL.md 之後注入
+#   runtime = 底層跑哪個 CLI。**enabled 的角色必填**,漏填直接載入失敗。
+#             ⚠️ 這個欄位與 command 之間**沒有任何機械檢查**——填 codex 卻跑 claude,
+#             系統不會發現,而「成對驗收不同廠牌」的保證會靜默失效。
+#             wrapper 轉接讓自動比對不可行(見 bin/agy-hub-runner),所以這是
+#             靠人維持的不變量:改 command 時務必同步改 runtime。
+#   probe 在 daemon 啟動時執行,非零離開碼會讓該角色當次停用。
 agents:
-  # task_types 預設 [coding, review];只有查詢型 agent 需要顯式宣告。
-  # probe 在 daemon 啟動時執行,非零離開碼會讓該 agent 當次停用。
-  claude:
+  implementer:
     enabled: true
+    runtime: claude
+    prompt: templates/roles/implementer.md
     skills: [general, rust, ruby, rails, python, javascript]
+    task_types: [coding]
     command:
       [
         caffeinate,
@@ -40,18 +52,37 @@ agents:
       ]
     probe: [claude, --version]
 
-  codex:
+  verifier:
     enabled: true
+    runtime: codex
+    prompt: templates/roles/verifier.md
     skills: [general, rust, ruby, rails, python, javascript]
+    task_types: [review]
+    command:
+      [caffeinate, -i, codex, exec, --json, --ephemeral, --sandbox, workspace-write]
+    probe: [codex, --version]
+
+  # verifier 問「功能對不對」,這支問「測試憑什麼證明功能對」。
+  # 兩者必須成對存在,少一個就湊不出驗收對。
+  test-auditor:
+    enabled: true
+    runtime: codex
+    prompt: templates/roles/test-auditor.md
+    skills: [general, rust, ruby, rails, python, javascript]
+    task_types: [review]
     command:
       [caffeinate, -i, codex, exec, --json, --ephemeral, --sandbox, workspace-write]
     probe: [codex, --version]
 
   # 本機模型(oMLX + hermes)。-Q 是必要的:hermes 的 markdown renderer
   # 會吃掉 hub-report 的 fence,少了它回報協定會靜默失效。
-  hermes:
+  # 程式碼盤點不需要雲端,也不燒任何 API 額度。
+  explorer:
     enabled: false
+    runtime: hermes
+    prompt: templates/roles/explorer.md
     skills: [general]
+    task_types: [explore]
     command:
       [
         caffeinate,
@@ -71,11 +102,13 @@ agents:
       ]
     probe: [hermes, --version]
 
-  # 查詢型 agent:只接 research 任務,不寫程式。
+  # 查詢型角色:只接 research 任務,不寫程式。
   # agy 的 prompt 走參數而非 stdin,故經 bin/agy-hub-runner 轉接;
   # 請把下面的路徑換成你 clone 本 repo 的絕對路徑。
-  agy:
+  researcher:
     enabled: false
+    runtime: agy
+    prompt: templates/roles/researcher.md
     skills: [research]
     task_types: [research]
     command:

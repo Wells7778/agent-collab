@@ -50,7 +50,7 @@ class ClaudeRunner:
         run_dir = workspace_dir.parent / f"{workspace_dir.name}.hub"
         run_dir.mkdir(parents=True, exist_ok=True)
         prompt_path = run_dir / f"prompt-g{task.generation}.md"
-        prompt_path.write_text(self._build_prompt(task, knowledge_dirs))
+        prompt_path.write_text(self._build_prompt(task, agent_name, knowledge_dirs))
         stdout_path = run_dir / f"stdout-g{task.generation}.log"
         stderr_path = run_dir / f"stderr-g{task.generation}.log"
         command = self.config.agents[agent_name].command
@@ -146,18 +146,43 @@ class ClaudeRunner:
             capture_output=True,
         )
 
-    def _build_prompt(self, task: TaskFile, knowledge_dirs: list[Path]) -> str:
-        parts = [
-            self.paths.protocol_file.read_text(),
-            "# 任務檔\n\n" + task.to_markdown(),
-        ]
-        handoff = self._latest_handoff(task.id)
-        if handoff is not None:
-            parts.append("# 最新 handoff\n\n" + handoff.read_text())
+    def _build_prompt(self, task: TaskFile, agent_name: str, knowledge_dirs: list[Path]) -> str:
+        parts = [self.paths.protocol_file.read_text()]
+        role_prompt = self._role_prompt(agent_name)
+        if role_prompt is not None:
+            parts.append(f"# 你的角色:{agent_name}\n\n" + role_prompt)
         if knowledge_dirs:
             listing = "\n".join(f"- {d}" for d in knowledge_dirs)
             parts.append("# knowledge projection(唯讀)\n\n" + listing)
+        parts.append("# 任務檔\n\n" + task.to_markdown())
+        handoff = self._latest_handoff(task.id)
+        if handoff is not None:
+            parts.append("# 最新 handoff\n\n" + handoff.read_text())
         return "\n\n---\n\n".join(parts)
+
+    def changed_files(self, task: TaskFile, agent_name: str) -> list[str] | None:
+        workspace = (
+            Path(self.config.workspaces_root).expanduser() / task.project / agent_name / task.id
+        )
+        base = task.workspace.branch_base or self.projects[task.project].default_branch
+        try:
+            result = subprocess.run(
+                ["git", "diff", "--name-only", f"{base}...HEAD"],
+                cwd=workspace,
+                capture_output=True,
+                text=True,
+            )
+        except OSError:
+            return None
+        if result.returncode != 0:
+            return None
+        return [line for line in result.stdout.splitlines() if line.strip()]
+
+    def _role_prompt(self, agent_name: str) -> str | None:
+        relative_path = self.config.agents[agent_name].prompt
+        if relative_path is None:
+            return None
+        return (self.hub_dir / relative_path).read_text()
 
     def _latest_handoff(self, task_id: str) -> Path | None:
         candidates = sorted(self.paths.handoffs.glob(f"{task_id}.handoff-*.md"), key=_handoff_number)

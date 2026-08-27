@@ -23,11 +23,16 @@ DEFAULT_CONFIG: dict = {
     "worktree_retention_days": 7,
     "max_generation": 3,
     "agents": {
-        "claude": {"enabled": True, "skills": ["general", "rust", "ruby", "python"]},
-        "codex": {"enabled": True, "skills": ["general", "python"]},
-        "grok": {"enabled": True, "skills": ["general", "python"]},
+        "claude": {"enabled": True, "runtime": "claude", "skills": ["general", "rust", "ruby", "python"]},
+        "codex": {"enabled": True, "runtime": "codex", "skills": ["general", "python"]},
+        "grok": {"enabled": True, "runtime": "grok", "skills": ["general", "python"]},
         "hermes": {"enabled": False, "skills": ["general"]},
-        "agy": {"enabled": True, "skills": ["research"], "task_types": ["research"]},
+        "agy": {
+            "enabled": True,
+            "runtime": "agy",
+            "skills": ["research"],
+            "task_types": ["research"],
+        },
     },
 }
 
@@ -107,6 +112,7 @@ class FakeRunner:
         self._poll_scripts: dict[str, list[PollResult]] = {}
         self._pid_to_task_id: dict[int, str] = {}
         self._alive_pids: set[int] = set()
+        self.changed_files_by_task: dict[str, list[str]] = {}
 
     def script_poll(self, task_id: str, results: list[PollResult]) -> None:
         self._poll_scripts[task_id] = list(results)
@@ -139,6 +145,9 @@ class FakeRunner:
 
     def checkpoint_workspace(self, handle: RunHandle) -> None:
         self.checkpoint_calls.append(handle)
+
+    def changed_files(self, task: TaskFile, agent_name: str) -> list[str] | None:
+        return self.changed_files_by_task.get(task.id, [])
 
     def mark_dead(self, pid: int) -> None:
         self._alive_pids.discard(pid)
@@ -192,6 +201,10 @@ def put_task(hub_dir: Path, subdir: str, task: TaskFile) -> Path:
 def write_config(hub_dir: Path, **overrides) -> None:
     config = {**DEFAULT_CONFIG, **overrides}
     (hub_dir / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
+
+
+def write_projects(hub_dir: Path, projects: dict) -> None:
+    (hub_dir / "projects.yaml").write_text(yaml.safe_dump(projects, sort_keys=False))
 
 
 def read_events(hub_dir: Path) -> list[Event]:

@@ -96,16 +96,22 @@ def test_read_status_returns_none_when_missing(tmp_path: Path):
 def test_example_config_matches_protocol_shape():
     config = hubfs.load_config(REPO_ROOT / "config.example.yaml")
     assert isinstance(config, HubConfig)
-    assert set(config.agents) == {"claude", "codex", "hermes", "agy"}
-    assert config.max_concurrent_global == 2
+    assert set(config.agents) == {
+        "implementer",
+        "verifier",
+        "test-auditor",
+        "explorer",
+        "researcher",
+    }
+    assert config.max_concurrent_global == 4
     assert config.max_concurrent_per_branch_base == 2
     assert config.max_concurrent_per_agent == 1
     assert config.task_timeout_minutes == 120
     assert config.heartbeat_seconds == 60
     assert config.worktree_retention_days == 7
     assert config.max_generation == 3
-    assert config.agents["codex"].probe == ["codex", "--version"]
-    assert config.agents["codex"].command == [
+    assert config.agents["verifier"].probe == ["codex", "--version"]
+    assert config.agents["verifier"].command == [
         "caffeinate",
         "-i",
         "codex",
@@ -119,14 +125,15 @@ def test_example_config_matches_protocol_shape():
 
 def test_example_config_keeps_the_fence_preserving_hermes_flag():
     config = hubfs.load_config(REPO_ROOT / "config.example.yaml")
-    assert "-Q" in config.agents["hermes"].command
+    assert "-Q" in config.agents["explorer"].command
 
 
 def test_example_projects_match_protocol_shape():
     projects = hubfs.load_projects(REPO_ROOT / "projects.example.yaml")
     assert isinstance(projects["my-service"], ProjectConfig)
-    assert projects["my-service"].allowed_agents == ["claude", "codex"]
-    assert projects["research-desk"].allowed_agents == ["agy"]
+    assert projects["my-service"].allowed_agents == ["implementer", "verifier", "test-auditor"]
+    assert projects["my-service"].spec_paths == ["test/**", "**/*.test.js"]
+    assert projects["research-desk"].allowed_agents == ["researcher", "explorer"]
     assert projects["research-desk"].setup == []
 
 
@@ -158,13 +165,42 @@ def test_read_events_tail_limit_zero_returns_empty(tmp_path: Path):
     assert hubfs.read_events_tail(path, 0) == []
 
 
-def test_example_config_restricts_agy_to_research_and_others_to_code():
+def test_example_config_gives_every_role_one_task_type_and_a_prompt():
     config = hubfs.load_config(REPO_ROOT / "config.example.yaml")
-    assert config.agents["agy"].task_types == ["research"]
-    assert config.agents["agy"].skills == ["research"]
-    for agent in ("claude", "codex", "hermes"):
-        assert config.agents[agent].task_types == ["coding", "review"]
+    expected = {
+        "implementer": "coding",
+        "verifier": "review",
+        "test-auditor": "review",
+        "explorer": "explore",
+        "researcher": "research",
+    }
+    for role, task_type in expected.items():
+        assert config.agents[role].task_types == [task_type]
+        assert config.agents[role].prompt == f"templates/roles/{role}.md"
+
+
+def test_example_config_pairs_reviewers_on_a_runtime_distinct_from_the_implementer():
+    config = hubfs.load_config(REPO_ROOT / "config.example.yaml")
+    author_runtime = config.agents["implementer"].runtime
+    reviewers = [config.agents["verifier"], config.agents["test-auditor"]]
+    assert all(reviewer.runtime != author_runtime for reviewer in reviewers)
+
+
+def test_every_role_prompt_referenced_by_the_example_config_exists():
+    config = hubfs.load_config(REPO_ROOT / "config.example.yaml")
+    for role, agent in config.agents.items():
+        assert agent.prompt is not None, role
+        assert (REPO_ROOT / agent.prompt).is_file(), f"{role} -> {agent.prompt}"
 
 
 def test_example_config_anchors_rate_limit_cooldown_minutes():
     assert hubfs.load_config(REPO_ROOT / "config.example.yaml").rate_limit_cooldown_minutes == 30
+
+
+def test_every_role_prompt_states_a_responsibility_and_a_report_contract():
+    config = hubfs.load_config(REPO_ROOT / "config.example.yaml")
+    for role, agent in config.agents.items():
+        body = (REPO_ROOT / agent.prompt).read_text()
+        assert len(body) > 400, f"{role} 的角色定義過短,可能是佔位檔"
+        assert "報告" in body, f"{role} 沒有說明產出要寫什麼"
+        assert body.startswith("你是"), f"{role} 沒有一開頭就說明它是誰"
