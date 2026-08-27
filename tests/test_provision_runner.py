@@ -230,6 +230,43 @@ def test_runner_spawn_polls_stdout_and_injects_prompt(
     assert untracked == {"secrets-ran", "setup-ran"}
 
 
+def test_adopted_run_still_delivers_its_stdout_after_a_daemon_restart(
+    runner_hub: Path, tmp_path: Path, bare_repo: Path, fake_claude: Path
+):
+    config = _runner_config(fake_claude, tmp_path)
+    projects = {"proj-a": _project_cfg(bare_repo)}
+    runner = ClaudeRunner(runner_hub, config, projects, term_grace_seconds=1.0)
+    task = _branched_task("T-R-030")
+    ws = Path(config.workspaces_root) / "proj-a" / "claude" / "T-R-030"
+    handle = runner.spawn(task, "claude", ws)
+    _wait_exited(runner, handle)
+
+    restarted = ClaudeRunner(runner_hub, config, projects, term_grace_seconds=1.0)
+    restarted.adopt(task, "claude", handle)
+    result = restarted.poll(handle)
+
+    assert result.exited
+    assert '"task_id": "T-R-030"' in result.stdout
+
+
+def test_adopted_run_is_not_reported_as_exited_while_still_alive(
+    runner_hub: Path, tmp_path: Path, bare_repo: Path, fake_stubborn: Path
+):
+    config = _runner_config(fake_stubborn, tmp_path)
+    projects = {"proj-a": _project_cfg(bare_repo)}
+    runner = ClaudeRunner(runner_hub, config, projects, term_grace_seconds=1.0)
+    task = _branched_task("T-R-031")
+    ws = Path(config.workspaces_root) / "proj-a" / "claude" / "T-R-031"
+    handle = runner.spawn(task, "claude", ws)
+
+    restarted = ClaudeRunner(runner_hub, config, projects, term_grace_seconds=1.0)
+    restarted.adopt(task, "claude", handle)
+    try:
+        assert restarted.poll(handle).exited is False
+    finally:
+        runner.kill_pgid(handle)
+
+
 def test_runner_prompt_includes_only_latest_handoff(
     runner_hub: Path, tmp_path: Path, bare_repo: Path, fake_claude: Path
 ):

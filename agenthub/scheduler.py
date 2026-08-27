@@ -47,6 +47,8 @@ class AgentRunner(Protocol):
 
     def poll(self, handle: RunHandle) -> PollResult: ...
 
+    def adopt(self, task: TaskFile, agent_name: str, handle: RunHandle) -> None: ...
+
     def kill_pgid(self, handle: RunHandle) -> None: ...
 
     def is_alive(self, pid: int, started_at: datetime) -> bool: ...
@@ -136,6 +138,7 @@ class Scheduler:
                 alive = self.runner.is_alive(status.pid, status.started_at)
 
             if alive and handle is not None:
+                self.runner.adopt(task, agent, handle)
                 self._running[task.id] = _RunningTask(
                     task_id=task.id, agent=agent, project=task.project, handle=handle
                 )

@@ -70,6 +70,29 @@ def test_startup_scan_leaves_alive_process_in_progress_and_reconnects_handle(hub
     assert (hub_dir / "tasks" / "review" / f"{task_id}.md").exists()
 
 
+def test_startup_scan_hands_the_adopted_run_back_to_the_runner(hub_dir: Path, clock: FakeClock):
+    runner = FakeRunner(clock)
+    scheduler_a = Scheduler.from_hub_dir(hub_dir, runner, clock)
+    task_id = "T-20260826-202"
+    dispatch_task(scheduler_a, hub_dir, task_id)
+
+    Scheduler.from_hub_dir(hub_dir, runner, clock).startup_scan()
+
+    assert [(call[0], call[1]) for call in runner.adopt_calls] == [(task_id, "claude")]
+
+
+def test_startup_scan_does_not_adopt_a_dead_run(hub_dir: Path, clock: FakeClock):
+    runner = FakeRunner(clock)
+    scheduler_a = Scheduler.from_hub_dir(hub_dir, runner, clock)
+    task_id = "T-20260826-203"
+    dispatch_task(scheduler_a, hub_dir, task_id)
+    runner.mark_dead(1000)
+
+    Scheduler.from_hub_dir(hub_dir, runner, clock).startup_scan()
+
+    assert runner.adopt_calls == []
+
+
 def test_startup_scan_does_not_adopt_a_handle_belonging_to_another_task(hub_dir: Path, clock: FakeClock):
     runner = FakeRunner(clock)
     scheduler_a = Scheduler.from_hub_dir(hub_dir, runner, clock)

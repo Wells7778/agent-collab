@@ -109,6 +109,7 @@ class FakeRunner:
         self.spawn_calls: list[tuple] = []
         self.kill_calls: list[RunHandle] = []
         self.checkpoint_calls: list[RunHandle] = []
+        self.adopt_calls: list[tuple] = []
         self._poll_scripts: dict[str, list[PollResult]] = {}
         self._pid_to_task_id: dict[int, str] = {}
         self._alive_pids: set[int] = set()
@@ -135,6 +136,10 @@ class FakeRunner:
                 self._alive_pids.discard(handle.pid)
             return result
         return PollResult(exited=False)
+
+    def adopt(self, task: TaskFile, agent_name: str, handle: RunHandle) -> None:
+        self.adopt_calls.append((task.id, agent_name, handle))
+        self._pid_to_task_id[handle.pid] = task.id
 
     def kill_pgid(self, handle: RunHandle) -> None:
         self.kill_calls.append(handle)

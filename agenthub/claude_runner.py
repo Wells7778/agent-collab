@@ -18,7 +18,7 @@ from agenthub.scheduler import PollResult, RunHandle
 
 @dataclass
 class _LiveProcess:
-    popen: subprocess.Popen
+    popen: subprocess.Popen | None
     stdout_path: Path
     stderr_path: Path
     workspace_dir: Path
@@ -72,13 +72,28 @@ class ClaudeRunner:
         )
         return handle
 
+    def adopt(self, task: TaskFile, agent_name: str, handle: RunHandle) -> None:
+        workspace_dir = (
+            Path(self.config.workspaces_root).expanduser() / task.project / agent_name / task.id
+        )
+        run_dir = workspace_dir.parent / f"{workspace_dir.name}.hub"
+        self._live[handle.pid] = _LiveProcess(
+            popen=None,
+            stdout_path=run_dir / f"stdout-g{task.generation}.log",
+            stderr_path=run_dir / f"stderr-g{task.generation}.log",
+            workspace_dir=workspace_dir,
+        )
+
     def poll(self, handle: RunHandle) -> PollResult:
         live = self._live.get(handle.pid)
         if live is None:
             if self.is_alive(handle.pid, handle.started_at):
                 return PollResult(exited=False)
             return PollResult(exited=True, stdout="")
-        if live.popen.poll() is None:
+        if live.popen is not None:
+            if live.popen.poll() is None:
+                return PollResult(exited=False)
+        elif self.is_alive(handle.pid, handle.started_at):
             return PollResult(exited=False)
         live.delivered = True
         raw = live.stdout_path.read_text()
@@ -206,7 +221,7 @@ class ClaudeRunner:
 
     def _reap(self, handle: RunHandle) -> None:
         live = self._live.get(handle.pid)
-        if live is not None:
+        if live is not None and live.popen is not None:
             live.popen.poll()
 
 

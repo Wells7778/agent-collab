@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from agenthub import hubfs
-from agenthub.scheduler import PollResult, Scheduler
+from agenthub.scheduler import PollResult, Scheduler, _extract_hub_reports
 from conftest import (
     FakeClock,
     FakeRunner,
@@ -409,7 +409,32 @@ def test_literal_newlines_inside_report_md_are_accepted(
     assert [e.event for e in events if e.event == "report_parse_failed"] == []
     assert [e.task_id for e in events if e.event == "task_review_ready"] == [task_id]
     task = hubfs.read_task(hub_dir / "tasks" / "review" / f"{task_id}.md")
-    assert "- 第二行" in task.report_md
+    assert "## 標題\n- 第一行\n- 第二行" in task.report_md
+
+
+def test_extract_hub_reports_keeps_literal_newlines_verbatim():
+    report_md = "## 標題\n- 第一行\n- 第二行"
+    block = (
+        "```hub-report\n"
+        '{"kind": "checkpoint", "task_id": "T-1", "summary": "s",'
+        ' "report_md": "' + report_md + '"}'
+        "\n```"
+    )
+
+    reports, errors = _extract_hub_reports(block)
+
+    assert errors == []
+    assert [r.report_md for r in reports] == [report_md]
+
+
+def test_extract_hub_reports_still_rejects_truncated_json():
+    block = '```hub-report\n{"kind": "final", "task_id": "T-1"\n```'
+
+    reports, errors = _extract_hub_reports(block)
+
+    assert reports == []
+    assert len(errors) == 1
+    assert "invalid json" in errors[0]
 
 
 def test_report_block_failing_schema_validation_is_reported_separately(
