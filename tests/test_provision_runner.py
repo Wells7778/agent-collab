@@ -712,6 +712,10 @@ def test_parse_reset_epoch_requires_pipe_anchor():
     assert _parse_reset_epoch("request 1234567890 failed") is None
 
 
+def test_detect_rate_limit_survives_an_unrepresentable_reset_epoch():
+    assert _detect_rate_limit("usage limit reached|999999999999", "") == (True, None)
+
+
 def test_detect_rate_limit_reads_nested_error_message():
     raw = '{"error":{"message":"usage limit reached|1767225600"}}\n'
     flagged, reset_at = _detect_rate_limit(raw, "")

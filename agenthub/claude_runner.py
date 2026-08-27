@@ -208,7 +208,10 @@ def _parse_reset_epoch(text: str) -> datetime | None:
     match = _RESET_EPOCH_RE.search(text)
     if match is None:
         return None
-    return datetime.fromtimestamp(int(match.group(1)), tz=timezone.utc)
+    try:
+        return datetime.fromtimestamp(int(match.group(1)), tz=timezone.utc)
+    except (ValueError, OverflowError, OSError):
+        return None
 
 
 def _error_texts(raw: str) -> list[str]:
