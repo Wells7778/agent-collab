@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>Agent Hub</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&display=swap">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif; background: #101120; color: #f4f4f4; }
+  .px { font-family: "Press Start 2P", monospace; }
+  .sk { font-family: "Silkscreen", monospace; }
+  .app { position: relative; width: 1440px; height: 900px; margin: 0 auto; background: #1a1c2c; overflow: hidden; }
+  .sprite svg { shape-rendering: crispEdges; display: block; }
+  .walking .f1 { animation: frameA 0.4s steps(1) infinite; }
+  .walking .f2 { animation: frameB 0.4s steps(1) infinite; }
+  .standing .f2 { opacity: 0; }
+  @keyframes frameA { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
+  @keyframes frameB { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+  .idler { animation: bob 1.4s steps(2) infinite; }
+  @keyframes bob { 0% { transform: translateY(0); } 50% { transform: translateY(-2px); } 100% { transform: translateY(0); } }
+  .zzz { animation: zfloat 2.4s linear infinite; }
+  @keyframes zfloat { 0% { transform: translateY(0); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(-14px); opacity: 0; } }
+  .blink { animation: blinkkey 1.4s steps(1) infinite; }
+  @keyframes blinkkey { 0% { opacity: 1; } 50% { opacity: 0.25; } 100% { opacity: 1; } }
+  .glow { animation: glowkey 2s steps(2) infinite; }
+  @keyframes glowkey { 0% { opacity: 0.65; } 50% { opacity: 1; } 100% { opacity: 0.65; } }
+  .pxwin { border: 3px solid #f4f4f4; box-shadow: 0 0 0 3px #1a1c2c, 6px 6px 0 3px rgba(0,0,0,0.45); }
+  .pxbtn { border: 2px solid #1a1c2c; box-shadow: inset -2px -2px 0 0 rgba(0,0,0,0.35), inset 2px 2px 0 0 rgba(255,255,255,0.25); cursor: pointer; user-select: none; }
+  .pxbtn:hover { filter: brightness(1.12); }
+  .pxbtn:active { box-shadow: inset 2px 2px 0 0 rgba(0,0,0,0.35); }
+  .pxfield { border: 2px solid #333c57; background: #1a1c2c; color: #f4f4f4; font-family: "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif; font-size: 14px; padding: 10px; outline: none; width: 100%; }
+  .pxfield:focus { border-color: #ffcd75; }
+  .task-card { background: #f4f4f4; border: 2px solid #333c57; box-shadow: 2px 2px 0 0 rgba(0,0,0,0.4); padding: 6px 8px; color: #1a1c2c; cursor: pointer; }
+  .task-card:hover { transform: translate(-1px,-1px); box-shadow: 3px 3px 0 0 rgba(0,0,0,0.4); }
+  .kbd { background: #22243a; background-image: repeating-linear-gradient(90deg, #333c57 0px, #333c57 3px, #22243a 3px, #22243a 5px); }
+  .tag { background: #ffcd75; color: #1a1c2c; border: 2px solid #1a1c2c; padding: 2px 5px; display: flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 10px; }
+  .zone-header { padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+  .zone-title { font-size: 11px; color: #f4f4f4; }
+  .zone-sub { font-size: 12px; }
+  .col-scroll { overflow-y: auto; scrollbar-width: thin; }
+  select.pxfield option { background: #1a1c2c; }
+  .modal-backdrop { position: absolute; inset: 0; background: rgba(10,11,20,0.72); z-index: 50; }
+  .hidden { display: none !important; }
+  .walker-el { position: absolute; z-index: 25; }
+  .row-line { display: flex; align-items: center; gap: 10px; padding: 7px 6px; border-bottom: 2px solid #22243a; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <svg width="0" height="0" style="position: absolute;">
+    <defs>
+      <g id="px-body">
+        <rect x="5" y="0" width="6" height="1" fill="#333c57"></rect>
+        <rect x="4" y="1" width="8" height="2" fill="#333c57"></rect>
+        <rect x="4" y="3" width="1" height="2" fill="#333c57"></rect>
+        <rect x="11" y="3" width="1" height="2" fill="#333c57"></rect>
+        <rect x="5" y="3" width="6" height="4" fill="#f4c689"></rect>
+        <rect x="6" y="4" width="1" height="1" fill="#1a1c2c"></rect>
+        <rect x="9" y="4" width="1" height="1" fill="#1a1c2c"></rect>
+        <rect x="4" y="7" width="8" height="7" fill="currentColor"></rect>
+        <rect x="10" y="7" width="2" height="7" fill="rgba(0,0,0,0.22)"></rect>
+        <rect x="2" y="8" width="2" height="5" fill="currentColor"></rect>
+        <rect x="12" y="8" width="2" height="5" fill="currentColor"></rect>
+        <rect x="12" y="8" width="2" height="5" fill="rgba(0,0,0,0.22)"></rect>
+        <rect x="2" y="13" width="2" height="2" fill="#f4c689"></rect>
+        <rect x="12" y="13" width="2" height="2" fill="#f4c689"></rect>
+        <rect x="4" y="14" width="8" height="1" fill="#1a1c2c"></rect>
+      </g>
+      <g id="px-f1">
+        <use href="#px-body"></use>
+        <rect x="5" y="15" width="3" height="6" fill="#29366f"></rect>
+        <rect x="4" y="21" width="4" height="2" fill="#1a1c2c"></rect>
+        <rect x="9" y="15" width="3" height="4" fill="#29366f"></rect>
+        <rect x="9" y="19" width="4" height="2" fill="#1a1c2c"></rect>
+      </g>
+      <g id="px-f2">
+        <use href="#px-body"></use>
+        <rect x="5" y="15" width="3" height="4" fill="#29366f"></rect>
+        <rect x="4" y="19" width="4" height="2" fill="#1a1c2c"></rect>
+        <rect x="9" y="15" width="3" height="6" fill="#29366f"></rect>
+        <rect x="9" y="21" width="4" height="2" fill="#1a1c2c"></rect>
+      </g>
+      <g id="px-idle">
+        <use href="#px-body"></use>
+        <rect x="5" y="15" width="3" height="6" fill="#29366f"></rect>
+        <rect x="9" y="15" width="3" height="6" fill="#29366f"></rect>
+        <rect x="4" y="21" width="4" height="2" fill="#1a1c2c"></rect>
+        <rect x="9" y="21" width="4" height="2" fill="#1a1c2c"></rect>
+      </g>
+    </defs>
+  </svg>
+
+  <div style="position: absolute; left: 0; top: 0; width: 1440px; height: 56px; background: #141522; border-bottom: 3px solid #333c57; display: flex; align-items: center; gap: 16px; padding: 0 20px; z-index: 40;">
+    <div class="px" style="font-size: 14px; color: #ffcd75;">AGENT HUB</div>
+    <div class="sk" style="font-size: 13px; color: #b8c5d4;">office view</div>
+    <select id="project-filter" class="pxfield" style="width: 220px; height: 36px; padding: 4px 8px; font-size: 13px;"></select>
+    <div id="invalid-chip" class="sk hidden" style="font-size: 12px; color: #b13e53;"></div>
+    <div style="flex-grow: 1;"></div>
+    <div id="conn-dot" style="width: 10px; height: 10px; background: #566c86;" title="連線狀態"></div>
+    <div id="crt-btn" class="pxbtn sk" style="height: 32px; padding: 0 10px; background: #333c57; color: #b8c5d4; display: flex; align-items: center; font-size: 12px;">CRT</div>
+    <div id="clock" class="px" style="font-size: 11px; color: #b8c5d4;">--:--</div>
+  </div>
+
+  <div id="scene" style="position: absolute; left: 16px; top: 72px; width: 1024px; height: 812px; background: repeating-conic-gradient(#262a3f 0% 25%, #232738 0% 50%) 0 0 / 32px 32px; border: 3px solid #333c57; overflow: hidden;">
+
+    <div style="position: absolute; left: 16px; top: 16px; width: 240px; height: 300px; background: #29366f; border: 3px solid #3b5dc9; display: flex; flex-direction: column;">
+      <div class="zone-header" style="background: #3b5dc9;">
+        <div class="px zone-title">DISPATCH</div>
+        <div class="zone-sub" style="color: #b8c8f0;">派工區 · 待派 <span id="backlog-count">0</span></div>
+      </div>
+      <div id="new-task-btn" class="pxbtn blink" style="margin: 12px 12px 8px; height: 52px; background: #ffcd75; color: #1a1c2c; display: flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0;">
+        <div class="px" style="font-size: 13px;">+</div>
+        <div style="font-size: 14px; font-weight: 700;">點櫃台建任務</div>
+      </div>
+      <div id="backlog-list" class="col-scroll" style="display: flex; flex-direction: column; gap: 8px; padding: 0 12px 12px;"></div>
+    </div>
+
+    <div style="position: absolute; left: 296px; top: 16px; width: 430px; height: 420px; background: #24283d; border: 3px solid #566c86;">
+      <div class="zone-header" style="background: #566c86;">
+        <div class="px zone-title">WORK</div>
+        <div class="zone-sub" style="color: #d4dde8;">作業區 · 進行中 <span id="working-count">0</span></div>
+      </div>
+      <div id="desk-grid" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 18px;"></div>
+    </div>
+
+    <div style="position: absolute; left: 766px; top: 16px; width: 240px; height: 330px; background: #1f3a3d; border: 3px solid #257179; display: flex; flex-direction: column;">
+      <div class="zone-header" style="background: #257179;">
+        <div class="px zone-title">REVIEW</div>
+        <div class="zone-sub" style="color: #bfe8ea;">待你裁決 · <span id="review-count">0</span> 件(點卡片)</div>
+      </div>
+      <div id="review-list" class="col-scroll" style="display: flex; flex-direction: column; gap: 10px; padding: 12px;"></div>
+    </div>
+
+    <div style="position: absolute; left: 16px; top: 360px; width: 240px; height: 210px; background: #3d2030; border: 3px solid #b13e53; display: flex; flex-direction: column;">
+      <div class="zone-header" style="background: #b13e53;">
+        <div class="px zone-title">BLOCKED</div>
+        <div class="zone-sub" style="color: #f0c9d1;">卡關區 · 點卡片回覆</div>
+      </div>
+      <div id="blocked-list" class="col-scroll" style="padding: 12px; display: flex; flex-direction: column; gap: 8px;"></div>
+    </div>
+
+    <div style="position: absolute; left: 766px; top: 380px; width: 240px; height: 190px; background: #1e3627; border: 3px solid #38b764; display: flex; flex-direction: column;">
+      <div class="zone-header" style="background: #38b764;">
+        <div class="px zone-title" style="color: #141522;">DONE</div>
+        <div class="zone-sub" style="color: #141522;">交付架 · <span id="done-count">0</span> 件</div>
+      </div>
+      <div id="done-list" class="col-scroll" style="display: flex; gap: 10px; padding: 14px; flex-wrap: wrap;"></div>
+    </div>
+
+    <div style="position: absolute; left: 296px; top: 470px; width: 430px; height: 100px; background: #24283d; border: 3px solid #333c57;">
+      <div style="position: absolute; left: 16px; top: 8px;">
+        <div class="sk" style="font-size: 11px; color: #b8c5d4;">LOUNGE</div>
+      </div>
+      <div id="lounge-row" style="position: absolute; left: 16px; top: 26px; display: flex; gap: 28px; align-items: flex-end;"></div>
+    </div>
+
+    <div style="position: absolute; left: 16px; top: 596px; width: 990px; height: 200px; border-top: 3px dashed #333c57;"></div>
+    <div id="walk-layer"></div>
+  </div>
+
+  <div style="position: absolute; left: 1056px; top: 72px; width: 368px; height: 812px; display: flex; flex-direction: column; gap: 14px;">
+    <div class="pxwin" style="background: #141522; max-height: 300px; display: flex; flex-direction: column;">
+      <div style="background: #333c57; padding: 8px 12px;">
+        <div class="px" style="font-size: 11px; color: #ffcd75;">SESSIONS</div>
+      </div>
+      <div id="session-list" class="col-scroll" style="display: flex; flex-direction: column; gap: 2px; padding: 10px;"></div>
+    </div>
+
+    <div class="pxwin" style="background: #141522; flex-grow: 1; display: flex; flex-direction: column; min-height: 0;">
+      <div style="background: #333c57; padding: 8px 12px; display: flex; align-items: center; gap: 10px;">
+        <div class="px" style="font-size: 11px; color: #ffcd75;">EVENT LOG</div>
+        <div class="blink" style="width: 8px; height: 8px; background: #a7f070;"></div>
+      </div>
+      <div id="event-list" class="col-scroll" style="padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 0;"></div>
+    </div>
+
+    <div class="pxwin" style="background: #141522; height: 190px; display: flex; flex-direction: column;">
+      <div style="background: #333c57; padding: 8px 12px;">
+        <div class="px" style="font-size: 11px; color: #ffcd75;">MESSAGES</div>
+      </div>
+      <div id="message-list" class="col-scroll" style="padding: 10px; display: flex; flex-direction: column; gap: 6px; min-height: 0;"></div>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast" class="pxwin hidden" style="position: absolute; left: 50%; transform: translateX(-50%); bottom: 28px; background: #141522; padding: 12px 18px; z-index: 70; display: flex; align-items: center; gap: 10px;">
+    <div id="toast-dot" style="width: 10px; height: 10px; background: #a7f070;"></div>
+    <div id="toast-text" style="font-size: 14px; color: #f4f4f4;"></div>
+  </div>
+  <div id="crt-overlay" class="hidden" style="position: absolute; inset: 0; z-index: 90; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, transparent 1px, transparent 3px);"></div>
+</div>
+
+<script>
+const AGENT_COLORS = { claude: "#ef7d57", codex: "#41a6f6", grok: "#a7f070", hermes: "#b13e53" };
+const FALLBACK_COLOR = "#73eff7";
+const EVENT_STYLE = {
+  task_created: ["CREATE", "#b8c5d4"], task_dispatched: ["DISPATCH", "#ffcd75"],
+  agent_spawned: ["SPAWN", "#a7f070"], spawn_failed: ["FAIL", "#b13e53"],
+  task_checkpoint: ["CKPT", "#b8c5d4"], task_blocked: ["BLOCK", "#b13e53"],
+  task_review_ready: ["REVIEW", "#73eff7"], task_done: ["DONE", "#38b764"],
+  task_completed: ["DONE", "#38b764"], task_cancelled: ["CANCEL", "#7d90a8"],
+  task_returned: ["RETURN", "#ffcd75"], task_replied: ["REPLY", "#73eff7"],
+  task_requeued: ["REQUEUE", "#ffcd75"], agent_exited: ["EXIT", "#7d90a8"],
+  agent_timeout: ["TIMEOUT", "#b13e53"], agent_rate_limited: ["LIMIT", "#ffcd75"],
+  task_invalid: ["INVALID", "#b13e53"],
+  probe_failed: ["PROBE", "#7d90a8"], review_task_created: ["XREV", "#41a6f6"],
+  daemon_started: ["BOOT", "#a7f070"]
+};
+const DESK_SLOTS = 4;
+const state = { board: null, status: [], firstLoad: true, arrived: new Set(), walkers: new Map(), lastSeen: new Map(), project: "", liveTask: null, liveTimer: null };
+
+function agentColor(name) {
+  if (!name) return FALLBACK_COLOR;
+  const base = String(name).split(" ")[0];
+  return AGENT_COLORS[base] || FALLBACK_COLOR;
+}
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+function wakeLabel(iso) {
+  const ts = new Date(iso);
+  return isNaN(ts) ? "" : String(ts.getHours()).padStart(2, "0") + ":" + String(ts.getMinutes()).padStart(2, "0");
+}
+function shortId(id) {
+  const m = /-(\d{3})$/.exec(id || "");
+  return m ? "T-" + m[1] : (id || "");
+}
+function spriteSvg(frame) {
+  return '<svg width="32" height="48" viewBox="0 0 16 24"><use href="#px-' + frame + '"></use></svg>';
+}
+function walkerSprite(color) {
+  return '<div class="facing"><div class="sprite" style="position: relative; width: 32px; height: 48px; color: ' + color + ';">' +
+    '<svg class="f1" width="32" height="48" viewBox="0 0 16 24" style="position: absolute; left: 0; top: 0;"><use href="#px-f1"></use></svg>' +
+    '<svg class="f2" width="32" height="48" viewBox="0 0 16 24" style="position: absolute; left: 0; top: 0;"><use href="#px-f2"></use></svg>' +
+    '<div class="carry-paper" style="position: absolute; left: 22px; top: 24px; width: 12px; height: 10px; background: #f4f4f4; border: 2px solid #1a1c2c;"></div>' +
+    '</div></div>';
+}
+
+function toast(text, ok = true) {
+  const box = document.getElementById("toast");
+  document.getElementById("toast-text").textContent = text;
+  document.getElementById("toast-dot").style.background = ok ? "#a7f070" : "#b13e53";
+  box.classList.remove("hidden");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => box.classList.add("hidden"), 3200);
+}
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  if (!res.ok) {
+    let detail = res.status + " " + res.statusText;
+    try { detail = (await res.json()).detail || detail; } catch (e) {}
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+function sessionRows(board, statusList) {
+  const rows = [];
+  const perAgent = {};
+  const inprog = (board?.in_progress || []).slice().sort((a, b) => a.id.localeCompare(b.id));
+  for (const t of inprog) {
+    const agent = t.claimed_by || "?";
+    perAgent[agent] = (perAgent[agent] || 0) + 1;
+    rows.push({ key: t.id, agent, seq: perAgent[agent], task: t, kind: "work" });
+  }
+  const counts = {};
+  for (const r of rows) counts[r.agent] = (counts[r.agent] || 0) + 1;
+  for (const r of rows) r.label = counts[r.agent] > 1 ? r.agent + " #" + r.seq : r.agent;
+  const busyAgents = new Set(rows.map((r) => r.agent));
+  for (const s of statusList) {
+    if (s.state === "working" && busyAgents.has(s.agent)) continue;
+    if (s.state === "offline") rows.push({ key: "off-" + s.agent, agent: s.agent, label: s.agent, kind: "offline" });
+    else if (s.state === "resting") rows.push({ key: "rest-" + s.agent, agent: s.agent, label: s.agent, kind: "rest", until: s.cooldown_until });
+    else if (s.state === "idle") rows.push({ key: "idle-" + s.agent, agent: s.agent, label: s.agent, kind: "idle" });
+    else if (s.state === "working" && !busyAgents.has(s.agent)) rows.push({ key: "w-" + s.agent, agent: s.agent, label: s.agent, kind: "work", task: { id: s.task_id || "", title: "", project: s.project || "" } });
+  }
+  return rows;
+}
+
+function deskAnchor(i) {
+  return { x: 296 + 28 + (i % 2) * 207, y: 66 + Math.floor(i / 2) * 170 + 18 };
+}
+const ANCHORS = {
+  dispatch: { x: 110, y: 235 },
+  review: { x: 850, y: 250 },
+  blocked: { x: 110, y: 470 },
+  done: { x: 850, y: 460 },
+  corridorY: 700
+};
+
+function renderDesks(rows) {
+  const grid = document.getElementById("desk-grid");
+  const workRows = rows.filter((r) => r.kind === "work" && r.task);
+  const cells = [];
+  for (let i = 0; i < Math.max(DESK_SLOTS, workRows.length); i++) {
+    const r = workRows[i];
+    const seated = r && state.arrived.has(r.key);
+    let inner = "";
+    if (r && seated) {
+      const color = agentColor(r.agent);
+      inner =
+        '<div style="position: absolute; left: 8px; top: 40px; width: 28px; height: 34px; background: #3b4a6b; border: 2px solid #2a3550; box-shadow: inset 0 4px 0 0 #4a5b80;"></div>' +
+        '<div style="position: absolute; left: 4px; top: 62px; width: 44px; height: 8px; background: ' + color + '; opacity: 0.4;"></div>' +
+        '<div class="sprite idler standing" style="position: absolute; left: 10px; top: 18px; color: ' + color + ';">' + spriteSvg("idle") + "</div>" +
+        '<div class="sk tag" style="position: absolute; left: 0; top: -4px;"><div class="blink" style="width: 6px; height: 6px; background: #1a1c2c;"></div>' + escapeHtml(shortId(r.task.id)) + "</div>";
+    }
+    const deskBase =
+      '<div style="position: absolute; left: 14px; top: 68px; width: 150px; height: 40px; background: #7a4841; border: 2px solid #4d2c27; box-shadow: inset 0 6px 0 0 #8f574e;"></div>' +
+      '<div style="position: absolute; left: 22px; top: 106px; width: 6px; height: 12px; background: #4d2c27;"></div>' +
+      '<div style="position: absolute; left: 150px; top: 106px; width: 6px; height: 12px; background: #4d2c27;"></div>' +
+      '<div style="position: absolute; left: 62px; top: 30px; width: 58px; height: 34px; background: #141522; border: 2px solid #333c57;">' +
+      (r && seated ? '<div class="glow" style="width: 100%; height: 100%; background: ' + agentColor(r.agent) + ';"></div>' : "") +
+      "</div>" +
+      '<div style="position: absolute; left: 86px; top: 64px; width: 10px; height: 5px; background: #333c57;"></div>' +
+      '<div style="position: absolute; left: 78px; top: 69px; width: 26px; height: 3px; background: #333c57;"></div>' +
+      '<div class="kbd" style="position: absolute; left: 70px; top: 76px; width: 42px; height: 8px; border: 1px solid #333c57;"></div>';
+    const caption = r && seated
+      ? '<div class="sk" style="position: absolute; left: 14px; top: 122px; font-size: 11px; color: ' + agentColor(r.agent) + ';">' + escapeHtml(r.label) + "</div>" +
+        '<div style="position: absolute; left: 14px; top: 136px; font-size: 11px; color: #b8c5d4; white-space: nowrap; overflow: hidden; max-width: 170px;">' + escapeHtml(r.task.id + " " + (r.task.title || "")) + "</div>"
+      : '<div class="sk" style="position: absolute; left: 14px; top: 122px; font-size: 11px; color: #7d90a8;">EMPTY DESK</div>';
+    cells.push('<div style="position: relative; height: 150px;' + (r && seated ? " cursor: pointer;" : "") + '"' + (r && seated ? ' data-live="' + escapeHtml(r.task.id) + '" title="點擊看即時過程"' : "") + ">" + inner + deskBase + caption + "</div>");
+  }
+  grid.innerHTML = cells.join("");
+}
+
+function renderLounge(rows) {
+  const lounge = document.getElementById("lounge-row");
+  const parts = [];
+  for (const r of rows) {
+    if (r.kind === "idle") {
+      parts.push('<div style="position: relative;"><div class="sprite idler standing" style="width: 32px; height: 48px; color: ' + agentColor(r.agent) + ';">' + spriteSvg("idle") + '</div><div class="sk" style="font-size: 10px; color: ' + agentColor(r.agent) + '; text-align: center;">' + escapeHtml(r.label) + "</div></div>");
+    } else if (r.kind === "rest") {
+      parts.push('<div style="position: relative;"><div class="zzz sk" style="position: absolute; left: 26px; top: -14px; font-size: 13px; color: #ffcd75;">Zzz</div><div class="sprite" style="width: 32px; height: 48px; color: ' + agentColor(r.agent) + '; filter: brightness(0.7);">' + spriteSvg("idle") + '</div><div class="sk" style="font-size: 10px; color: #ffcd75; text-align: center;">' + escapeHtml(r.label) + (wakeLabel(r.until) ? "<br>" + wakeLabel(r.until) : "") + "</div></div>");
+    } else if (r.kind === "offline") {
+      parts.push('<div style="position: relative;"><div class="zzz sk" style="position: absolute; left: 26px; top: -14px; font-size: 13px; color: #7d90a8;">Zzz</div><div class="sprite" style="width: 32px; height: 48px; color: #566c86; filter: grayscale(1) brightness(0.85);">' + spriteSvg("idle") + '</div><div class="sk" style="font-size: 10px; color: #7d90a8; text-align: center;">' + escapeHtml(r.label) + "</div></div>");
+    }
+  }
+  lounge.innerHTML = parts.length ? parts.join("") : '<div style="font-size: 12px; color: #7d90a8; padding-top: 14px;">沒有閒置的 agent</div>';
+}
+
+function renderCards(board) {
+  document.getElementById("backlog-count").textContent = board.backlog.length;
+  document.getElementById("working-count").textContent = board.in_progress.length;
+  document.getElementById("review-count").textContent = board.review.length;
+  document.getElementById("done-count").textContent = board.done.length;
+  const chip = document.getElementById("invalid-chip");
+  if (board.invalid_count > 0) { chip.textContent = "INVALID " + board.invalid_count; chip.classList.remove("hidden"); }
+  else chip.classList.add("hidden");
+
+  document.getElementById("backlog-list").innerHTML = board.backlog.map((t) =>
+    '<div class="task-card" data-detail="' + escapeHtml(t.id) + '"><div class="sk" style="font-size: 10px; color: #47536b;">' + escapeHtml(t.id) + " · " + escapeHtml(t.priority) + (t.type === "review" ? " · 互審" : t.type === "research" ? " · 查詢" : "") + '</div><div style="font-size: 13px; font-weight: 700;">' + escapeHtml(t.title) + "</div></div>"
+  ).join("");
+
+  document.getElementById("review-list").innerHTML = board.review.map((t) =>
+    '<div class="task-card" data-review="' + escapeHtml(t.id) + '" style="border-color: #257179;"><div class="sk" style="font-size: 10px; color: #257179;">' + escapeHtml(t.id) + " · " + escapeHtml(t.claimed_by || "?") + '</div><div style="font-size: 13px; font-weight: 700;">' + escapeHtml(t.title) + '</div><div style="font-size: 11px; color: #47536b;">' + escapeHtml(t.project) + " · g" + t.generation + "</div></div>"
+  ).join("");
+
+  document.getElementById("blocked-list").innerHTML = board.blocked.map((t) =>
+    '<div class="task-card" data-blocked="' + escapeHtml(t.id) + '" style="border-color: #b13e53;"><div class="sk" style="font-size: 10px; color: #b13e53;">' + escapeHtml(t.id) + '</div><div style="font-size: 13px; font-weight: 700;">' + escapeHtml(t.title) + '</div><div style="font-size: 11px; color: #47536b;">點擊回覆提問</div></div>'
+  ).join("");
+
+  document.getElementById("done-list").innerHTML = board.done.slice(-9).map((t) =>
+    '<div data-detail="' + escapeHtml(t.id) + '" title="' + escapeHtml(t.id + " " + t.title) + '" style="width: 56px; height: 42px; background: ' + (t.status === "cancelled" ? "#7d90a8" : "#a7f070") + '; border: 2px solid #38b764; box-shadow: inset -3px -3px 0 0 rgba(0,0,0,0.15); display: flex; align-items: center; justify-content: center; cursor: pointer;"><div class="px" style="font-size: 13px; color: #14532b;">' + (t.status === "cancelled" ? "XX" : "OK") + "</div></div>"
+  ).join("");
+}
+
+function renderSessions(rows) {
+  const list = document.getElementById("session-list");
+  const html = rows.map((r) => {
+    let dot = "#7d90a8", stateLabel = "OFF", detail = "probe 未過或未啟動", bg = "transparent";
+    if (r.kind === "work") { dot = "#a7f070"; stateLabel = "WORK"; detail = [r.task.id || "", r.task.project || "", r.task.title || ""].filter(Boolean).join(" · "); bg = "rgba(167,240,112,0.08)"; }
+    if (r.kind === "walk") { dot = "#ffcd75"; stateLabel = "CLAIM"; detail = "領單 " + (r.task?.id || "") + " → 前往桌位"; bg = "rgba(255,205,117,0.10)"; }
+    if (r.kind === "idle") { dot = "#ffcd75"; stateLabel = "IDLE"; detail = "休息區待命"; bg = "transparent"; }
+    if (r.kind === "rest") { dot = "#ffcd75"; stateLabel = "REST"; detail = wakeLabel(r.until) ? "限額休息中 · 預計 " + wakeLabel(r.until) + " 醒來" : "限額休息中"; bg = "rgba(255,205,117,0.06)"; }
+    const liveAttr = (r.kind === "work" || r.kind === "walk") && r.task && r.task.id ? ' data-live="' + escapeHtml(r.task.id) + '" title="點擊看即時過程"' : "";
+    return '<div class="row-line"' + liveAttr + ' style="background: ' + bg + ';' + (liveAttr ? " cursor: pointer;" : "") + '"><div style="width: 10px; height: 10px; background: ' + dot + '; flex-shrink: 0;"></div><div class="sk" style="font-size: 13px; color: #f4f4f4; width: 96px; white-space: nowrap;">' + escapeHtml(r.label) + '</div><div style="font-size: 12px; color: #b8c5d4; flex-grow: 1; white-space: nowrap; overflow: hidden;">' + escapeHtml(detail) + '</div><div class="sk" style="font-size: 11px; color: ' + dot + ';">' + stateLabel + "</div></div>";
+  }).join("");
+  list.innerHTML = html || '<div style="font-size: 12px; color: #7d90a8;">尚無 session(daemon 未啟動?)</div>';
+}
+
+function renderEvents(events) {
+  const list = document.getElementById("event-list");
+  const rows = events.slice().reverse().map((e) => {
+    const [kind, color] = EVENT_STYLE[e.event] || [e.event.toUpperCase().slice(0, 8), "#b8c5d4"];
+    const ts = new Date(e.ts);
+    const hhmm = isNaN(ts) ? "--:--" : String(ts.getHours()).padStart(2, "0") + ":" + String(ts.getMinutes()).padStart(2, "0");
+    const who = e.agent ? " · " + e.agent : "";
+    return '<div style="display: flex; gap: 8px; align-items: baseline;"><div class="sk" style="font-size: 11px; color: #7d90a8; white-space: nowrap;">' + hhmm + '</div><div class="sk" style="font-size: 11px; color: ' + color + '; white-space: nowrap;">' + escapeHtml(kind) + '</div><div style="font-size: 12px; color: #b8c5d4; white-space: nowrap; overflow: hidden;">' + escapeHtml((e.task_id || "") + who) + "</div></div>";
+  });
+  list.innerHTML = rows.join("");
+}
+
+function renderMessages(messages) {
+  const list = document.getElementById("message-list");
+  list.innerHTML = messages.slice().reverse().map((m, i) => {
+    const firstLine = (m.content || "").split("\n").find((l) => l.trim()) || m.filename;
+    return '<div class="row-line" data-msg="' + i + '" style="cursor: pointer;"><div style="font-size: 12px; color: #b8c5d4; white-space: nowrap; overflow: hidden;">' + escapeHtml(firstLine) + "</div></div>";
+  }).join("") || '<div style="font-size: 12px; color: #7d90a8;">沒有訊息</div>';
+  list._messages = messages.slice().reverse();
+}
+
+function legDuration(from, to) {
+  const dist = Math.abs(to.x - from.x) + Math.abs(to.y - from.y);
+  return Math.max(400, dist / 0.18);
+}
+function walkPath(el, points, done) {
+  let i = 0;
+  let current = points[0];
+  el.style.left = current.x + "px";
+  el.style.top = current.y + "px";
+  const step = () => {
+    i += 1;
+    if (i >= points.length) {
+      el.querySelector(".facing")?.classList?.remove("flip");
+      done && done();
+      return;
+    }
+    const next = points[i];
+    const ms = legDuration(current, next);
+    const facing = el.querySelector(".facing");
+    if (facing) facing.style.transform = next.x < current.x ? "scaleX(-1)" : "scaleX(1)";
+    el.style.transition = "left " + ms + "ms linear, top " + ms + "ms linear";
+    requestAnimationFrame(() => { el.style.left = next.x + "px"; el.style.top = next.y + "px"; });
+    current = next;
+    setTimeout(step, ms + 30);
+  };
+  setTimeout(step, 30);
+}
+
+function spawnClaimWalk(taskId, agent, deskIndex) {
+  const layer = document.getElementById("walk-layer");
+  const color = agentColor(agent);
+  const el = document.createElement("div");
+  el.className = "walker-el";
+  el.innerHTML =
+    '<div class="sk tag" style="position: absolute; left: -14px; top: -20px; background: #f4f4f4;"><div style="width: 6px; height: 6px; background: #3b5dc9;"></div>' + escapeHtml(shortId(taskId)) + "</div>" +
+    walkerSprite(color) +
+    '<div class="sk" style="font-size: 10px; color: ' + color + '; text-align: center; white-space: nowrap;">' + escapeHtml(agent) + "</div>";
+  el.querySelector(".sprite").classList.add("walking");
+  layer.appendChild(el);
+  state.walkers.set(taskId, el);
+  const desk = deskAnchor(deskIndex >= 0 ? deskIndex : 0);
+  const points = [ANCHORS.dispatch, { x: 262, y: 260 }, { x: 262, y: 660 }, { x: 340, y: ANCHORS.corridorY }, { x: 734, y: ANCHORS.corridorY }, { x: 734, y: 390 }, desk];
+  walkPath(el, points, () => {
+    state.walkers.delete(taskId);
+    el.remove();
+    state.arrived.add(taskId);
+    refreshBoardNow();
+  });
+}
+
+function spawnExitWalk(taskId, agent, target) {
+  const layer = document.getElementById("walk-layer");
+  const color = agentColor(agent);
+  const el = document.createElement("div");
+  el.className = "walker-el";
+  el.innerHTML = walkerSprite(color) + '<div class="sk" style="font-size: 10px; color: ' + color + '; text-align: center;">' + escapeHtml(agent) + "</div>";
+  el.querySelector(".carry-paper")?.remove();
+  el.querySelector(".sprite").classList.add("walking");
+  layer.appendChild(el);
+  const from = deskAnchor(0);
+  walkPath(el, [from, { x: 734, y: 390 }, { x: 734, y: ANCHORS.corridorY }, target, { x: target.x, y: target.y }], () => el.remove());
+}
+
+function diffAndAnimate(board) {
+  const current = new Map((board.in_progress || []).map((t) => [t.id, t]));
+  if (state.firstLoad) {
+    for (const id of current.keys()) state.arrived.add(id);
+  } else {
+    let idx = 0;
+    for (const [id, t] of current) {
+      if (!state.lastSeen.has(id) && !state.walkers.has(id) && !state.arrived.has(id)) {
+        spawnClaimWalk(id, t.claimed_by || "?", idx);
+      }
+      idx += 1;
+    }
+    for (const [id, t] of state.lastSeen) {
+      if (!current.has(id)) {
+        state.arrived.delete(id);
+        const inReview = (board.review || []).some((x) => x.id === id);
+        const inBlocked = (board.blocked || []).some((x) => x.id === id);
+        const target = inReview ? ANCHORS.review : inBlocked ? ANCHORS.blocked : ANCHORS.done;
+        spawnExitWalk(id, t.claimed_by || "?", target);
+      }
+    }
+  }
+  state.lastSeen = current;
+  state.firstLoad = false;
+}
+
+let refreshTimer = null;
+async function refreshBoardNow() {
+  try {
+    const qs = state.project ? "?project=" + encodeURIComponent(state.project) : "";
+    const [board, statusList, events, messages] = await Promise.all([
+      api("/api/tasks" + qs), api("/api/status"), api("/api/events?limit=30"), api("/api/messages?limit=8")
+    ]);
+    state.board = board;
+    state.status = statusList;
+    diffAndAnimate(board);
+    const rows = sessionRows(board, statusList);
+    for (const r of rows) if (r.kind === "work" && state.walkers.has(r.key)) r.kind = "walk";
+    renderCards(board);
+    renderDesks(rows);
+    renderLounge(rows);
+    renderSessions(rows);
+    renderEvents(events);
+    renderMessages(messages);
+    document.getElementById("conn-dot").style.background = "#a7f070";
+  } catch (err) {
+    document.getElementById("conn-dot").style.background = "#b13e53";
+  }
+}
+
+function modal(title, headerColor, bodyHtml) {
+  const root = document.getElementById("modal-root");
+  root.innerHTML =
+    '<div class="modal-backdrop" id="modal-close-bg"></div>' +
+    '<div class="pxwin" style="position: absolute; left: 440px; top: 110px; width: 560px; max-height: 720px; background: #24283d; z-index: 60; display: flex; flex-direction: column;">' +
+    '<div style="background: ' + headerColor + '; padding: 10px 14px; display: flex; align-items: center; flex-shrink: 0;">' +
+    '<div class="px" style="font-size: 12px; color: #f4f4f4;">' + title + "</div>" +
+    '<div style="flex-grow: 1;"></div>' +
+    '<div id="modal-close" class="pxbtn" style="width: 44px; height: 44px; background: #b13e53; color: #f4f4f4; display: flex; align-items: center; justify-content: center;"><div class="px" style="font-size: 11px;">X</div></div>' +
+    "</div>" +
+    '<div class="col-scroll" style="padding: 18px; display: flex; flex-direction: column; gap: 14px;">' + bodyHtml + "</div></div>";
+  const close = () => { root.innerHTML = ""; };
+  document.getElementById("modal-close").onclick = close;
+  document.getElementById("modal-close-bg").onclick = close;
+  return close;
+}
+
+function field(label, inner) {
+  return '<div style="display: flex; flex-direction: column; gap: 6px;"><div class="sk" style="font-size: 12px; color: #b8c5d4;">' + label + "</div>" + inner + "</div>";
+}
+
+function openNewTaskModal() {
+  const projects = window._projects || [];
+  const options = projects.map((p) => '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + "</option>").join("");
+  const close = modal("NEW TASK", "#3b5dc9",
+    field("標題 TITLE", '<input id="f-title" class="pxfield" style="height: 44px;" placeholder="一句話說清楚要做什麼">') +
+    '<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px;">' +
+    field("專案 PROJECT", '<select id="f-project" class="pxfield" style="height: 44px;">' + options + "</select>") +
+    field("型別 TYPE", '<select id="f-type" class="pxfield" style="height: 44px;"><option value="coding">coding</option><option value="research">research</option></select>') +
+    field("優先序 PRIORITY", '<select id="f-priority" class="pxfield" style="height: 44px;"><option>P2</option><option>P0</option><option>P1</option><option>P3</option></select>') +
+    "</div>" +
+    field("需求描述 REQUIREMENT", '<textarea id="f-req" class="pxfield" style="height: 96px; resize: none;" placeholder="要做什麼、為什麼;背景與參考連結"></textarea>') +
+    field("驗收標準 ACCEPTANCE", '<textarea id="f-acc" class="pxfield" style="height: 72px; resize: none;" placeholder="- [ ] 可機械驗證的條件"></textarea>') +
+    '<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">' +
+    field("SKILLS(逗號分隔)", '<input id="f-skills" class="pxfield" style="height: 44px;" placeholder="rust, general">') +
+    field("ASANA 連結(選填)", '<input id="f-asana" class="pxfield" style="height: 44px;" placeholder="https://app.asana.com/...">') +
+    "</div>" +
+    '<div style="display: flex; gap: 12px; justify-content: flex-end;"><div id="f-submit" class="pxbtn" style="height: 48px; padding: 0 24px; background: #ffcd75; color: #1a1c2c; display: flex; align-items: center; gap: 8px;"><div class="px" style="font-size: 11px;">GO</div><div style="font-size: 14px; font-weight: 700;">建立任務</div></div></div>'
+  );
+  document.getElementById("f-submit").onclick = async () => {
+    const title = document.getElementById("f-title").value.trim();
+    const requirement = document.getElementById("f-req").value.trim();
+    const acceptance = document.getElementById("f-acc").value.trim();
+    if (!title || !requirement || !acceptance) { toast("標題、需求描述、驗收標準都必填", false); return; }
+    const skills = document.getElementById("f-skills").value.split(",").map((s) => s.trim()).filter(Boolean);
+    const asana = document.getElementById("f-asana").value.trim();
+    try {
+      const created = await api("/api/tasks", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title, project: document.getElementById("f-project").value,
+          type: document.getElementById("f-type").value,
+          requirement_md: requirement, acceptance_md: acceptance,
+          skills_required: skills, priority: document.getElementById("f-priority").value,
+          asana_url: asana || null
+        })
+      });
+      close();
+      toast(created.id + "「" + created.title + "」已加入待派區");
+      refreshBoardNow();
+    } catch (err) { toast("建立失敗:" + err.message, false); }
+  };
+}
+
+function agentOptions(defaultAgent, excludedAgent) {
+  const names = (state.status || []).map((s) => s.agent);
+  const opts = ['<option value="">自動(能力路由)</option>'];
+  for (const n of names) {
+    if (n === excludedAgent) continue;
+    opts.push('<option value="' + escapeHtml(n) + '"' + (n === defaultAgent ? " selected" : "") + ">" + escapeHtml(n) + "</option>");
+  }
+  return opts.join("");
+}
+
+async function openReviewModal(taskId) {
+  let task = null;
+  try { task = await api("/api/tasks/" + encodeURIComponent(taskId)); } catch (err) { toast(err.message, false); return; }
+  const reportTail = (task.report_md || "").split("\n").slice(-14).join("\n");
+  const close = modal("REVIEW", "#257179",
+    '<div style="font-size: 16px; font-weight: 700; color: #f4f4f4;">' + escapeHtml(task.id + " " + task.title) + "</div>" +
+    '<div style="font-size: 12px; color: #b8c5d4;">' + escapeHtml((task.claimed_by || "?") + " · " + task.project + " · g" + task.generation + " · " + (task.workspace?.branch || "")) + "</div>" +
+    '<pre style="font-size: 12px; color: #b8c5d4; background: #141522; border: 2px solid #333c57; padding: 10px; max-height: 180px; overflow: auto; white-space: pre-wrap; margin: 0;">' + escapeHtml(reportTail || "(尚無執行報告)") + "</pre>" +
+    field("打回意見 / 互審指定(選填)", '<textarea id="r-feedback" class="pxfield" style="height: 64px; resize: none;" placeholder="打回修改時必填意見"></textarea>') +
+    field("指定 AGENT（互審不含原實作者）", '<select id="r-assignee" class="pxfield" style="height: 44px;">' + agentOptions(null, task.claimed_by) + "</select>") +
+    '<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">' +
+    '<div id="r-complete" class="pxbtn" style="height: 52px; background: #38b764; color: #141522; display: flex; align-items: center; justify-content: center;"><div style="font-size: 14px; font-weight: 700;">✔ 完成</div></div>' +
+    '<div id="r-cross" class="pxbtn" style="height: 52px; background: #41a6f6; color: #141522; display: flex; align-items: center; justify-content: center;"><div style="font-size: 14px; font-weight: 700;">⇄ 派互審</div></div>' +
+    '<div id="r-return" class="pxbtn" style="height: 52px; background: #ffcd75; color: #141522; display: flex; align-items: center; justify-content: center;"><div style="font-size: 14px; font-weight: 700;">↩ 打回修改</div></div>' +
+    '<div id="r-cancel" class="pxbtn" style="height: 52px; background: #b13e53; color: #f4f4f4; display: flex; align-items: center; justify-content: center;"><div style="font-size: 14px; font-weight: 700;">✕ 取消任務</div></div>' +
+    "</div>"
+  );
+  const act = async (fn, okText) => {
+    try { await fn(); close(); toast(okText); refreshBoardNow(); }
+    catch (err) { toast(err.message, false); }
+  };
+  document.getElementById("r-complete").onclick = () => act(
+    () => api("/api/tasks/" + taskId + "/complete", { method: "POST" }), task.id + " 已標記完成,移入交付架");
+  document.getElementById("r-cross").onclick = () => act(() => {
+    const assignee = document.getElementById("r-assignee").value || null;
+    return api("/api/tasks/" + taskId + "/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assigned_to: assignee }) });
+  }, "已產生互審任務,進入待派區");
+  document.getElementById("r-return").onclick = () => {
+    const feedback = document.getElementById("r-feedback").value.trim();
+    if (!feedback) { toast("打回修改需要填意見", false); return; }
+    const assignee = document.getElementById("r-assignee").value || null;
+    act(() => api("/api/tasks/" + taskId + "/return", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ feedback_md: feedback, assigned_to: assignee }) }), task.id + " 已打回,退回待派區");
+  };
+  document.getElementById("r-cancel").onclick = () => act(
+    () => api("/api/tasks/" + taskId + "/cancel", { method: "POST" }), task.id + " 已取消");
+}
+
+async function openBlockedModal(taskId) {
+  let task = null;
+  try { task = await api("/api/tasks/" + encodeURIComponent(taskId)); } catch (err) { toast(err.message, false); return; }
+  const reportTail = (task.report_md || "").split("\n").slice(-14).join("\n");
+  const close = modal("BLOCKED", "#b13e53",
+    '<div style="font-size: 16px; font-weight: 700; color: #f4f4f4;">' + escapeHtml(task.id + " " + task.title) + "</div>" +
+    '<pre style="font-size: 12px; color: #b8c5d4; background: #141522; border: 2px solid #333c57; padding: 10px; max-height: 200px; overflow: auto; white-space: pre-wrap; margin: 0;">' + escapeHtml(reportTail || "(執行報告為空,提問見 MESSAGES)") + "</pre>" +
+    field("你的回覆(會 append 進任務檔並退回待派)", '<textarea id="b-reply" class="pxfield" style="height: 96px; resize: none;" placeholder="回答 agent 的提問"></textarea>') +
+    '<div style="display: flex; justify-content: flex-end;"><div id="b-send" class="pxbtn" style="height: 48px; padding: 0 24px; background: #ffcd75; color: #1a1c2c; display: flex; align-items: center;"><div style="font-size: 14px; font-weight: 700;">送出回覆並解卡</div></div></div>'
+  );
+  document.getElementById("b-send").onclick = async () => {
+    const reply = document.getElementById("b-reply").value.trim();
+    if (!reply) { toast("回覆內容不能為空", false); return; }
+    try {
+      await api("/api/tasks/" + taskId + "/reply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reply_md: reply }) });
+      close(); toast(task.id + " 已回覆,退回待派區"); refreshBoardNow();
+    } catch (err) { toast(err.message, false); }
+  };
+}
+
+async function openDetailModal(taskId) {
+  let task = null;
+  try { task = await api("/api/tasks/" + encodeURIComponent(taskId)); } catch (err) { toast(err.message, false); return; }
+  modal("TASK", "#333c57",
+    '<div style="font-size: 16px; font-weight: 700; color: #f4f4f4;">' + escapeHtml(task.id + " " + task.title) + "</div>" +
+    '<div style="font-size: 12px; color: #b8c5d4;">' + escapeHtml(task.type + " · " + task.project + " · " + task.priority + " · " + task.status + " · g" + task.generation + (task.assigned_to ? " · 指定 " + task.assigned_to : "")) + "</div>" +
+    field("需求描述", '<pre style="font-size: 13px; color: #f4f4f4; white-space: pre-wrap; margin: 0;">' + escapeHtml(task.requirement_md || "-") + "</pre>") +
+    field("驗收標準", '<pre style="font-size: 13px; color: #f4f4f4; white-space: pre-wrap; margin: 0;">' + escapeHtml(task.acceptance_md || "-") + "</pre>") +
+    field("執行報告", '<pre style="font-size: 12px; color: #b8c5d4; background: #141522; border: 2px solid #333c57; padding: 10px; max-height: 220px; overflow: auto; white-space: pre-wrap; margin: 0;">' + escapeHtml(task.report_md || "(空)") + "</pre>")
+  );
+}
+
+async function openLiveModal(taskId) {
+  if (state.liveTimer) clearInterval(state.liveTimer);
+  state.liveTask = taskId;
+  modal("LIVE · " + escapeHtml(taskId), "#566c86",
+    '<div id="live-feed" class="col-scroll" style="background: #141522; border: 2px solid #333c57; padding: 10px; height: 480px; display: flex; flex-direction: column; gap: 8px;"><div style="font-size: 12px; color: #7d90a8;">載入中…</div></div>'
+  );
+  const KIND_STYLE = { say: ["SAY", "#b8c5d4"], tool: ["TOOL", "#ffcd75"], result: ["DONE", "#38b764"], sys: ["SYS", "#7d90a8"] };
+  const refresh = async () => {
+    const feed = document.getElementById("live-feed");
+    if (!feed || state.liveTask !== taskId) { clearInterval(timer); return; }
+    try {
+      const data = await api("/api/sessions/" + encodeURIComponent(taskId) + "/log?limit=80");
+      if (state.liveTask !== taskId || !document.getElementById("live-feed")) return;
+      const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40;
+      if (!data.entries.length) {
+        feed.innerHTML = '<div style="font-size: 12px; color: #7d90a8;">還沒有輸出(session 剛啟動或 log 尚未落檔)· g' + data.generation + "</div>";
+        return;
+      }
+      feed.innerHTML = data.entries.map((e) => {
+        const [label, color] = KIND_STYLE[e.kind] || ["?", "#b8c5d4"];
+        return '<div style="display: flex; gap: 8px; align-items: baseline;"><div class="sk" style="font-size: 11px; color: ' + color + '; white-space: nowrap; flex-shrink: 0;">' + label + '</div><div style="font-size: 12px; color: #d8e0ea; white-space: pre-wrap; word-break: break-word;">' + escapeHtml(e.text) + "</div></div>";
+      }).join("");
+      if (atBottom) feed.scrollTop = feed.scrollHeight;
+    } catch (err) {
+      feed.innerHTML = '<div style="font-size: 12px; color: #b13e53;">' + escapeHtml(err.message) + "</div>";
+    }
+  };
+  const timer = setInterval(refresh, 2500);
+  state.liveTimer = timer;
+  refresh();
+}
+
+function openMessageModal(message) {
+  modal("MESSAGE", "#333c57",
+    '<div class="sk" style="font-size: 12px; color: #b8c5d4;">' + escapeHtml(message.filename) + "</div>" +
+    '<pre style="font-size: 13px; color: #f4f4f4; white-space: pre-wrap; margin: 0;">' + escapeHtml(message.content) + "</pre>"
+  );
+}
+
+document.addEventListener("click", (ev) => {
+  const live = ev.target.closest("[data-live]");
+  if (live && live.dataset.live) { openLiveModal(live.dataset.live); return; }
+  const detail = ev.target.closest("[data-detail]");
+  if (detail && detail.dataset.detail) { openDetailModal(detail.dataset.detail); return; }
+  const review = ev.target.closest("[data-review]");
+  if (review) { openReviewModal(review.dataset.review); return; }
+  const blocked = ev.target.closest("[data-blocked]");
+  if (blocked) { openBlockedModal(blocked.dataset.blocked); return; }
+  const msg = ev.target.closest("[data-msg]");
+  if (msg) {
+    const messages = document.getElementById("message-list")._messages || [];
+    const m = messages[Number(msg.dataset.msg)];
+    if (m) openMessageModal(m);
+  }
+});
+
+document.getElementById("new-task-btn").onclick = openNewTaskModal;
+document.getElementById("project-filter").onchange = (ev) => { state.project = ev.target.value; refreshBoardNow(); };
+document.getElementById("crt-btn").onclick = () => {
+  const overlay = document.getElementById("crt-overlay");
+  overlay.classList.toggle("hidden");
+  try { localStorage.setItem("hub-crt", overlay.classList.contains("hidden") ? "0" : "1"); } catch (e) {}
+};
+
+function tickClock() {
+  const now = new Date();
+  document.getElementById("clock").textContent = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
+}
+
+async function init() {
+  try {
+    const data = await api("/api/projects");
+    window._projects = data.projects || [];
+    const filter = document.getElementById("project-filter");
+    filter.innerHTML = '<option value="">全部專案</option>' + window._projects.map((p) => '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + "</option>").join("");
+  } catch (e) { window._projects = []; }
+  try { if (localStorage.getItem("hub-crt") === "1") document.getElementById("crt-overlay").classList.remove("hidden"); } catch (e) {}
+  tickClock();
+  setInterval(tickClock, 20000);
+  await refreshBoardNow();
+  refreshTimer = setInterval(refreshBoardNow, 3000);
+}
+init();
+</script>
+</body>
+</html>

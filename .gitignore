@@ -1,0 +1,24 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.DS_Store
+
+# 內部規劃文件(規格、交接、可行性審查),不隨本 repo 發佈
+docs/
+
+# 本機設定:內含內部 repo 位址與絕對路徑,改用 *.example.yaml 當範本
+config.yaml
+projects.yaml
+bin/com.weiby.agent-hub.plist
+
+# 運行時狀態:一律不進版控
+logs/
+tasks/**/*
+messages/**/*
+handoffs/**/*
+knowledge/*
+status/*
+events/*.jsonl
+!**/.gitkeep

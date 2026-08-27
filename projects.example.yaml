@@ -1,0 +1,36 @@
+# 複製成 projects.yaml 後改成你自己的專案(projects.yaml 不進版控:
+# 內含內部 repo 位址與本機路徑)。權威 schema:agenthub/schema.py 的 ProjectConfig。
+#
+# 每個 key 是任務檔 `project:` 欄位引用的名稱。
+
+my-service:
+  # git clone 得到的任何位址:https、ssh、CodeCommit,或本機路徑。
+  repo: git@github.com:your-org/my-service.git
+  default_branch: develop
+
+  # setup_secrets 先跑、setup 後跑,兩者都在剛開好的 worktree 內執行。
+  # 機密一律從本機既有檔案複製進去,禁止從遠端拉取。
+  setup_secrets:
+    - "cp ~/secrets/my-service/.env.test ."
+  setup: ["npm ci"]
+
+  # 供人撰寫驗收標準時參考;daemon 不會自動執行。
+  test: ["npm test"]
+
+  # 唯讀知識投影:daemon 以 rsync 同步到 knowledge/<project>/,
+  # agent 只能讀投影,碰不到來源目錄。
+  knowledge_paths:
+    - ~/notes/projects/my-service/
+
+  allowed_agents: [claude, codex]
+
+# 查詢型任務建議獨立掛一個沒有 setup 的專案:research 任務也會開 worktree,
+# 掛在有重編譯步驟的專案下會先跑完整個 build 才開始查資料。
+research-desk:
+  repo: /path/to/a/small/local/repo
+  default_branch: main
+  setup_secrets: []
+  setup: []
+  test: []
+  knowledge_paths: []
+  allowed_agents: [agy]

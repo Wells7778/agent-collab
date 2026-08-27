@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from agenthub import hubfs, probe
+from agenthub.claude_runner import ClaudeRunner
+from agenthub.loop import SystemClock, run_forever
+from agenthub.scheduler import Scheduler
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--hub-dir", type=Path, default=REPO_ROOT)
+    args = parser.parse_args()
+    hub_dir = args.hub_dir.expanduser().resolve()
+    paths = hubfs.HubPaths(hub_dir)
+    (hub_dir / "logs").mkdir(exist_ok=True)
+
+    config = hubfs.load_config(paths.config_file)
+    projects = hubfs.load_projects(paths.projects_file)
+    clock = SystemClock()
+
+    probe_results = probe.run_probes(config)
+    effective = probe.apply_probe_results(config, probe_results, paths, clock)
+
+    hubfs.emit_event(paths.events, "daemon", "daemon_started", clock.now(), detail={"probes": probe_results})
+
+    runner = ClaudeRunner(hub_dir, effective, projects)
+    run_forever(Scheduler(hub_dir, effective, projects, runner, clock))
+
+
+if __name__ == "__main__":
+    main()

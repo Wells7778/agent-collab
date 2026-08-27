@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+import uvicorn
+
+from agenthub.dashboard_api import create_app
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Agent Hub dashboard server")
+    parser.add_argument("--hub-dir", type=Path, required=True)
+    parser.add_argument("--port", type=int, default=8642)
+    args = parser.parse_args()
+
+    app = create_app(args.hub_dir.expanduser().resolve())
+    uvicorn.run(app, host="127.0.0.1", port=args.port)
+
+
+if __name__ == "__main__":
+    main()

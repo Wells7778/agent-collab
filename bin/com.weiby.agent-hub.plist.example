@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.weiby.agent-hub</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HUB_DIR__/.venv/bin/python</string>
+    <string>__HUB_DIR__/bin/hub-daemon</string>
+    <string>--hub-dir</string>
+    <string>__HUB_DIR__</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>WorkingDirectory</key>
+  <string>__HUB_DIR__</string>
+  <key>StandardOutPath</key>
+  <string>__HUB_DIR__/logs/daemon.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HUB_DIR__/logs/daemon.err.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__EXTRA_PATH__:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>PYTHONDONTWRITEBYTECODE</key>
+    <string>1</string>
+  </dict>
+</dict>
+</plist>

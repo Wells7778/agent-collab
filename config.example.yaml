@@ -1,0 +1,91 @@
+# 複製成 config.yaml 後改成你自己的設定(config.yaml 不進版控)。
+# 權威 schema:agenthub/schema.py 的 HubConfig。
+
+workspaces_root: ~/agent-workspaces
+
+# 注入每個 agent 子行程的環境變數。放需要的 profile 名稱等非機密設定;
+# 真正的機密走 projects.yaml 的 setup_secrets,由本機檔案複製進 workspace。
+spawn_env: {}
+
+max_concurrent_global: 2
+max_concurrent_per_project: 1
+max_concurrent_per_agent: 1
+
+task_timeout_minutes: 120
+heartbeat_seconds: 60
+worktree_retention_days: 7
+
+# 任務被回收幾次後轉 blocked 交人處理。
+max_generation: 3
+
+# 偵測到 agent 撞用量上限、且對方沒給恢復時間時,讓它休息多久。
+rate_limit_cooldown_minutes: 30
+
+agents:
+  # task_types 預設 [coding, review];只有查詢型 agent 需要顯式宣告。
+  # probe 在 daemon 啟動時執行,非零離開碼會讓該 agent 當次停用。
+  claude:
+    enabled: true
+    skills: [general, rust, ruby, rails, python, javascript]
+    command:
+      [
+        caffeinate,
+        -i,
+        claude,
+        -p,
+        --output-format,
+        stream-json,
+        --verbose,
+        --dangerously-skip-permissions,
+      ]
+    probe: [claude, --version]
+
+  codex:
+    enabled: true
+    skills: [general, rust, ruby, rails, python, javascript]
+    command:
+      [caffeinate, -i, codex, exec, --json, --ephemeral, --sandbox, workspace-write]
+    probe: [codex, --version]
+
+  # 本機模型(oMLX + hermes)。-Q 是必要的:hermes 的 markdown renderer
+  # 會吃掉 hub-report 的 fence,少了它回報協定會靜默失效。
+  hermes:
+    enabled: false
+    skills: [general]
+    command:
+      [
+        caffeinate,
+        -i,
+        hermes,
+        chat,
+        --query-file,
+        "-",
+        -m,
+        gemma-4-26B-A4B-it-MLX-4bit,
+        --yolo,
+        -Q,
+        --max-turns,
+        "60",
+        --run-budget,
+        "5400",
+      ]
+    probe: [hermes, --version]
+
+  # 查詢型 agent:只接 research 任務,不寫程式。
+  # agy 的 prompt 走參數而非 stdin,故經 bin/agy-hub-runner 轉接;
+  # 請把下面的路徑換成你 clone 本 repo 的絕對路徑。
+  agy:
+    enabled: false
+    skills: [research]
+    task_types: [research]
+    command:
+      [
+        caffeinate,
+        -i,
+        /absolute/path/to/agent-collab/bin/agy-hub-runner,
+        --model,
+        gemini-3.7-flash-high,
+        --print-timeout,
+        10m,
+      ]
+    probe: [agy, --help]
