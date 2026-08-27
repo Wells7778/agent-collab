@@ -191,13 +191,19 @@
 </div>
 
 <script>
-const AGENT_COLORS = { claude: "#ef7d57", codex: "#41a6f6", grok: "#a7f070", hermes: "#b13e53" };
+const AGENT_COLORS = {
+  implementer: "#ef7d57", verifier: "#41a6f6", "test-auditor": "#a7f070",
+  explorer: "#b13e53", researcher: "#ffcd75",
+};
 const FALLBACK_COLOR = "#73eff7";
+const TASK_TYPE_LABEL = { review: " · 互審", research: " · 查詢", explore: " · 盤點" };
 const EVENT_STYLE = {
   task_created: ["CREATE", "#b8c5d4"], task_dispatched: ["DISPATCH", "#ffcd75"],
   agent_spawned: ["SPAWN", "#a7f070"], spawn_failed: ["FAIL", "#b13e53"],
   task_checkpoint: ["CKPT", "#b8c5d4"], task_blocked: ["BLOCK", "#b13e53"],
   task_review_ready: ["REVIEW", "#73eff7"], task_done: ["DONE", "#38b764"],
+  report_parse_failed: ["BADRPT", "#b13e53"], task_no_report: ["NORPT", "#b13e53"],
+  review_pair_unavailable: ["NOPAIR", "#ffcd75"],
   task_completed: ["DONE", "#38b764"], task_cancelled: ["CANCEL", "#7d90a8"],
   task_returned: ["RETURN", "#ffcd75"], task_replied: ["REPLY", "#73eff7"],
   task_requeued: ["REQUEUE", "#ffcd75"], agent_exited: ["EXIT", "#7d90a8"],
@@ -349,7 +355,7 @@ function renderCards(board) {
   else chip.classList.add("hidden");
 
   document.getElementById("backlog-list").innerHTML = board.backlog.map((t) =>
-    '<div class="task-card" data-detail="' + escapeHtml(t.id) + '"><div class="sk" style="font-size: 10px; color: #47536b;">' + escapeHtml(t.id) + " · " + escapeHtml(t.priority) + (t.type === "review" ? " · 互審" : t.type === "research" ? " · 查詢" : "") + '</div><div style="font-size: 13px; font-weight: 700;">' + escapeHtml(t.title) + "</div></div>"
+    '<div class="task-card" data-detail="' + escapeHtml(t.id) + '"><div class="sk" style="font-size: 10px; color: #47536b;">' + escapeHtml(t.id) + " · " + escapeHtml(t.priority) + (TASK_TYPE_LABEL[t.type] || "") + '</div><div style="font-size: 13px; font-weight: 700;">' + escapeHtml(t.title) + "</div></div>"
   ).join("");
 
   document.getElementById("review-list").innerHTML = board.review.map((t) =>
@@ -541,7 +547,7 @@ function openNewTaskModal() {
     field("標題 TITLE", '<input id="f-title" class="pxfield" style="height: 44px;" placeholder="一句話說清楚要做什麼">') +
     '<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px;">' +
     field("專案 PROJECT", '<select id="f-project" class="pxfield" style="height: 44px;">' + options + "</select>") +
-    field("型別 TYPE", '<select id="f-type" class="pxfield" style="height: 44px;"><option value="coding">coding</option><option value="research">research</option></select>') +
+    field("型別 TYPE", '<select id="f-type" class="pxfield" style="height: 44px;"><option value="coding">coding</option><option value="research">research</option><option value="explore">explore</option></select>') +
     field("優先序 PRIORITY", '<select id="f-priority" class="pxfield" style="height: 44px;"><option>P2</option><option>P0</option><option>P1</option><option>P3</option></select>') +
     "</div>" +
     field("需求描述 REQUIREMENT", '<textarea id="f-req" class="pxfield" style="height: 96px; resize: none;" placeholder="要做什麼、為什麼;背景與參考連結"></textarea>') +
