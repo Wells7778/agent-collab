@@ -246,17 +246,23 @@ def _split_frontmatter(text: str) -> tuple[str, str]:
 
 
 def _parse_body_sections(body: str) -> dict[str, str]:
-    matches = list(_SECTION_HEADER_RE.finditer(body))
-    found = {m.group(1): m for m in matches}
-    missing = [name for name in _BODY_SECTIONS if name not in found]
+    bounds: list[tuple[str, int, int]] = []
+    cursor = 0
+    missing: list[str] = []
+    for name in _BODY_SECTIONS:
+        match = _SECTION_HEADER_RE.search(body, cursor)
+        while match is not None and match.group(1) != name:
+            match = _SECTION_HEADER_RE.search(body, match.end())
+        if match is None:
+            missing.append(name)
+            continue
+        bounds.append((name, match.start(), match.end()))
+        cursor = match.end()
     if missing:
         raise TaskFileParseError(f"missing body sections: {missing}")
-    ordered_matches = sorted(matches, key=lambda m: m.start())
     sections: dict[str, str] = {}
-    for idx, match in enumerate(ordered_matches):
-        name = match.group(1)
-        start = match.end()
-        end = ordered_matches[idx + 1].start() if idx + 1 < len(ordered_matches) else len(body)
+    for idx, (name, _, start) in enumerate(bounds):
+        end = bounds[idx + 1][1] if idx + 1 < len(bounds) else len(body)
         sections[name] = body[start:end].strip()
     return sections
 

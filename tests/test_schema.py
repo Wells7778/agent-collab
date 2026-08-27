@@ -47,6 +47,30 @@ def test_missing_body_section_raises():
         TaskFile.from_markdown(broken)
 
 
+def test_section_headers_inside_the_report_do_not_split_the_body():
+    task = make_task(
+        requirement_md="原始需求",
+        acceptance_md="- [ ] 驗收項",
+        report_md="## 盤點結果\n\n## 需求描述\n\n這是報告內容,不是需求",
+    )
+
+    back = TaskFile.from_markdown(task.to_markdown())
+
+    assert back.requirement_md == "原始需求"
+    assert back.acceptance_md == "- [ ] 驗收項"
+    assert back.report_md == task.report_md
+
+
+def test_a_report_naming_every_section_still_round_trips():
+    report_md = "## 執行報告\n## 驗收標準\n## 需求描述\n尾段"
+    task = make_task(requirement_md="需求", acceptance_md="驗收", report_md=report_md)
+
+    back = TaskFile.from_markdown(task.to_markdown())
+
+    assert back.requirement_md == "需求"
+    assert back.report_md == report_md
+
+
 def test_invalid_priority_rejected():
     with pytest.raises(ValidationError):
         make_task(priority="P9")

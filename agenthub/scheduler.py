@@ -22,7 +22,8 @@ from agenthub.schema import (
     parse_frontmatter_lenient,
 )
 
-_HUB_REPORT_BLOCK_RE = re.compile(r"```hub-report\s*\n(.*?)\n```", re.DOTALL)
+_HUB_REPORT_OPEN_RE = re.compile(r"```hub-report[^\S\n]*\n")
+_HUB_REPORT_DECODER = json.JSONDecoder(strict=False)
 _PRIORITY_RANK = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 _NON_WRITING_TASK_TYPES = {"review"}
 
@@ -576,10 +577,13 @@ class Scheduler:
 def _extract_hub_reports(stdout: str) -> tuple[list[HubReport], list[str]]:
     reports: list[HubReport] = []
     errors: list[str] = []
-    for match in _HUB_REPORT_BLOCK_RE.finditer(stdout):
-        block = match.group(1)
+    for match in _HUB_REPORT_OPEN_RE.finditer(stdout):
+        start = match.end()
+        while start < len(stdout) and stdout[start].isspace():
+            start += 1
+        block = stdout[start:]
         try:
-            data = json.loads(block, strict=False)
+            data, _ = _HUB_REPORT_DECODER.raw_decode(stdout, start)
         except json.JSONDecodeError as exc:
             errors.append(f"invalid json: {exc}; block={_truncate(block)}")
             continue

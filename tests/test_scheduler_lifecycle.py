@@ -427,6 +427,34 @@ def test_extract_hub_reports_keeps_literal_newlines_verbatim():
     assert [r.report_md for r in reports] == [report_md]
 
 
+def test_extract_hub_reports_survives_a_code_fence_inside_report_md():
+    report_md = "看這段:\n```python\nx = 1\n```\n結束"
+    block = (
+        "```hub-report\n"
+        '{"kind": "checkpoint", "task_id": "T-1", "summary": "s",'
+        ' "report_md": "' + report_md + '"}'
+        "\n```"
+    )
+
+    reports, errors = _extract_hub_reports(block)
+
+    assert errors == []
+    assert [r.report_md for r in reports] == [report_md]
+
+
+def test_extract_hub_reports_ignores_trailing_junk_after_the_json_object():
+    block = (
+        "```hub-report\n"
+        '{"kind": "checkpoint", "task_id": "T-1", "summary": "s", "report_md": "m"}'
+        '", "type": "final"}\n```'
+    )
+
+    reports, errors = _extract_hub_reports(block)
+
+    assert errors == []
+    assert [r.summary for r in reports] == ["s"]
+
+
 def test_extract_hub_reports_still_rejects_truncated_json():
     block = '```hub-report\n{"kind": "final", "task_id": "T-1"\n```'
 
