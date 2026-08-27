@@ -576,7 +576,7 @@ def _extract_hub_reports(stdout: str) -> tuple[list[HubReport], list[str]]:
     for match in _HUB_REPORT_BLOCK_RE.finditer(stdout):
         block = match.group(1)
         try:
-            data = json.loads(block)
+            data = json.loads(block, strict=False)
         except json.JSONDecodeError as exc:
             errors.append(f"invalid json: {exc}; block={_truncate(block)}")
             continue

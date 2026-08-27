@@ -390,6 +390,28 @@ def test_malformed_report_block_emits_report_parse_failed_and_counts_toward_no_r
     assert no_report[0].detail["parse_errors"] == 1
 
 
+def test_literal_newlines_inside_report_md_are_accepted(
+    scheduler: Scheduler, hub_dir: Path, runner: FakeRunner
+):
+    task_id = "T-20260826-184"
+    dispatch_task(scheduler, hub_dir, task_id)
+    stdout = (
+        "```hub-report\n"
+        '{"kind": "final", "task_id": "' + task_id + '", "result": "completed",'
+        ' "summary": "s", "report_md": "## 標題\n- 第一行\n- 第二行", "pr_url": null}'
+        "\n```"
+    )
+    runner.script_poll(task_id, [PollResult(exited=True, stdout=stdout)])
+
+    scheduler.tick()
+
+    events = read_events(hub_dir)
+    assert [e.event for e in events if e.event == "report_parse_failed"] == []
+    assert [e.task_id for e in events if e.event == "task_review_ready"] == [task_id]
+    task = hubfs.read_task(hub_dir / "tasks" / "review" / f"{task_id}.md")
+    assert "- 第二行" in task.report_md
+
+
 def test_report_block_failing_schema_validation_is_reported_separately(
     scheduler: Scheduler, hub_dir: Path, runner: FakeRunner
 ):

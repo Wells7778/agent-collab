@@ -97,6 +97,7 @@ fenced code block,語言標記固定 `hub-report`,內容為單一 JSON object:
 - coding final 的 pr_url 必填目前由人工於 review 把關;機械強制留待 PR 佈建階段實作。
 - session 結束而無合法 final 回報 = 視同 agent 死亡,任務回收重派(generation +1)。
 - JSON 不得含註解;無值填 null。
+- `report_md` 的換行請寫 `\n`;寫成裸換行 daemon 也吃(解析用 `strict=False`),但別依賴這個寬容。
 
 ## 6. handoff 檔(context 壓縮保險)
 
